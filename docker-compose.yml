@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  images-trans:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VOLC_ACCESS_KEY=${VOLC_ACCESS_KEY}
+      - VOLC_SECRET_KEY=${VOLC_SECRET_KEY}
+      - TARGET_LANGUAGE=${TARGET_LANGUAGE}
+      - API_PASSWORD=${API_PASSWORD}
+    restart: unless-stopped 
