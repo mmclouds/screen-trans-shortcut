@@ -3,7 +3,12 @@
 一个基于火山引擎图片翻译 API 的屏幕翻译工具后端服务。可以快速翻译截图中的文字内容，支持多语言翻译。
 
 ## 效果演示
-![alt text](images/56a866fa-b8b8-44a2-a804-ae7a1f0f6d0a.gif)
+<div style="width: 50%; max-width: 400px;">
+    <img src="images/yanshi4.gif" alt="效果演示" style="width: 100%; height: auto;">
+</div>
+
+## 快捷指令配置演示
+
 
 ## 功能特点
 
@@ -102,14 +107,19 @@ docker run -d \
 ### 快捷指令的配置
 #### 1. 第一步，添加快捷指令
 手机上访问该链接：https://www.icloud.com/shortcuts/2dd55a9bf91b4c1a977284425c2fffee，添加快捷指令如下：
-![alt text](images/77743cb7cd44336dc47af1dd0756257.png)
-![alt text](images/6ac6cbe4bb3660485a4f8ef03259fee.png)
-
+<div style="width: 70%; max-width: 300px;">
+    <img src="images/77743cb7cd44336dc47af1dd0756257.png" alt="" style="width: 100%; height: auto;">
+</div>
+<div style="width: 70%; max-width: 300px;">
+    <img src="images/6ac6cbe4bb3660485a4f8ef03259fee.png" alt="" style="width: 100%; height: auto;">
+</div>
 #### 2. 第二步，修改配置
 打开快捷指令，设置自己服务器的地址和密码即可。
 #### 3. 第三步，双击触发快捷指令
 按照如下配置即可
-![alt text](images/20250105013358.gif)
+<div style="width: 70%; max-width: 300px;">
+    <img src="images/20250105013358.gif" alt="配置演示" style="width: 100%; height: auto;">
+</div>
 
 ## 许可证
 
