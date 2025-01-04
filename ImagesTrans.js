@@ -70,7 +70,6 @@ app.post('/', async (req, res) => {
 async function compressImage(base64String, quality) {
   const inputBuffer = Buffer.from(base64String, 'base64');
   const outputBuffer = await sharp(inputBuffer)
-    .grayscale()
     .jpeg({
       quality: quality || 85,  // 设置JPEG压缩质量，范围0-100，值越小文件越小，但质量越差
       chromaSubsampling: '4:2:0',  // 色度子采样，4:2:0表示在保持亮度的同时减少色彩信息，可以减少30-40%的文件大小
