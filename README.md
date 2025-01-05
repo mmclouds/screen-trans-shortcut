@@ -3,9 +3,7 @@
 一个基于火山引擎图片翻译 API 的屏幕翻译工具后端服务。可以快速翻译截图中的文字内容，支持多语言翻译。
 
 ## 效果演示
-<div style="width: 50%; max-width: 300px;">
-    <img src="images/yanshi4.gif" alt="效果演示" style="width: 100%; height: auto;">
-</div>
+<img src="images/yanshi4.gif" width="300" alt="效果演示">
 
 ## 快捷指令配置演示
 
@@ -80,7 +78,6 @@ docker-compose down
 #### 3. 使用 Docker 直接部署
 
 ```bash
-
 # 运行容器(dockerhub镜像)
 docker run -d \
   --name screen-trans \
@@ -101,27 +98,22 @@ docker run -d \
   -e VOLC_ACCESS_KEY=your_access_key \
   -e VOLC_SECRET_KEY=your_secret_key \
    registry.cn-hangzhou.aliyuncs.com/mmclouds/screen-trans-shortcut
-
 ```
 
 ### 快捷指令的配置
 #### 1. 第一步，添加快捷指令
 手机上访问该链接：https://www.icloud.com/shortcuts/2dd55a9bf91b4c1a977284425c2fffee
 ，添加快捷指令如下：
-<div style="width: 50%; max-width: 300px;">
-    <img src="images/77743cb7cd44336dc47af1dd0756257.png" alt="" style="width: 100%; height: auto;">
-</div>
-<div style="width: 50%; max-width: 300px;">
-    <img src="images/6ac6cbe4bb3660485a4f8ef03259fee.png" alt="" style="width: 100%; height: auto;">
-</div>
+
+<img src="images/77743cb7cd44336dc47af1dd0756257.png" width="300" alt="快捷指令配置1">
+<img src="images/6ac6cbe4bb3660485a4f8ef03259fee.png" width="300" alt="快捷指令配置2">
 
 #### 2. 第二步，修改配置
 打开快捷指令，设置自己服务器的地址和密码即可。
 #### 3. 第三步，双击触发快捷指令配置
 按照如下配置即可
-<div style="width: 50%; max-width: 300px;">
-    <img src="images/20250105013358.gif" alt="配置演示" style="width: 100%; height: auto;">
-</div>
+
+<img src="images/20250105013358.gif" width="300" alt="配置演示">
 
 ## 许可证
 
