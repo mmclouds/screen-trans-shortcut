@@ -1,20 +1,12 @@
 # Screen Translation Shortcut
 
-一个基于火山引擎图片翻译 API 的屏幕翻译工具后端服务。可以快速翻译截图中的文字内容，支持多语言翻译。
+基于IOS的快捷指令和火山引擎的图片翻译API，实现的移动端屏幕翻译功能。
 
 ## 效果演示
-<img src="images/yanshi4.gif" width="300" alt="效果演示">
+在任何APP的任何页面，只要轻击两下手机背面，就可以将屏幕内容翻译。如下演示内容所示：
 
-## 快捷指令配置演示
+<img src="images/1.gif" width="300" alt="效果演示">
 
-
-## 功能特点
-
-- 支持多种语言翻译（中文、英文、日语、韩语等）
-- 自动图片压缩和优化，提高翻译速度和质量
-- 简单的 API 接口，易于集成
-- 支持 Docker 部署
-- 安全的密码验证机制
 
 ## 服务端部署
 
@@ -22,7 +14,6 @@
 
 #### 1. 环境要求
 - Node.js >= 14
-- npm 或 yarn
 
 #### 2. 安装依赖
 ```bash
@@ -39,12 +30,12 @@ cp .env.example .env
 ```
 
 环境变量说明：
-- `TARGET_LANGUAGE`: 目标翻译语言（如：zh, en, ja, ko）
+- `TARGET_LANGUAGE`: 目标翻译语言见[火山引擎图片翻译API](https://www.volcengine.com/docs/4640/65105)
 - `API_PASSWORD`: 设置API访问密码
 - `VOLC_ACCESS_KEY`: 火山引擎访问密钥ID
 - `VOLC_SECRET_KEY`: 火山引擎访问密钥密码
 
-> 注意：请在火山引擎控制台获取访问密钥：https://console.volcengine.com/iam/keymanage/
+> 注意：获取访问密钥流程见[火山引擎API接入流程文档](https://www.volcengine.com/docs/4640/130872)
 
 #### 4. 启动服务
 ```bash
@@ -57,7 +48,7 @@ node ImagesTrans.js
 - Docker
 - Docker Compose（可选，用于更方便的部署）
 
-#### 2. 使用 Docker Compose（推荐）
+#### 2. 使用 Docker Compose
 
 ```bash
 # 复制环境变量示例文件
@@ -75,7 +66,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-#### 3. 使用 Docker 直接部署
+#### 3. 使用 Docker 直接部署（推荐）
 
 ```bash
 # 运行容器(dockerhub镜像)
@@ -100,20 +91,24 @@ docker run -d \
    registry.cn-hangzhou.aliyuncs.com/mmclouds/screen-trans-shortcut
 ```
 
-### 快捷指令的配置
-#### 1. 第一步，添加快捷指令
-手机上访问该链接：https://www.icloud.com/shortcuts/2dd55a9bf91b4c1a977284425c2fffee
+## 快捷指令的配置
+### 1. 添加快捷指令
+手机上访问该链接：https://www.icloud.com/shortcuts/0008eb28503e42c2a187aef8bc94627d
 ，添加快捷指令如下：
 
-<img src="images/77743cb7cd44336dc47af1dd0756257.png" width="300" alt="快捷指令配置1">
-<img src="images/6ac6cbe4bb3660485a4f8ef03259fee.png" width="300" alt="快捷指令配置2">
+<img src="images/2.png" width="300" alt="快捷指令配置1">
+<img src="images/3.png" width="300" alt="快捷指令配置2">
 
-#### 2. 第二步，修改配置
+### 2. 修改配置
 打开快捷指令，设置自己服务器的地址和密码即可。
-#### 3. 第三步，双击触发快捷指令配置
+### 3. 双击触发快捷指令配置
 按照如下配置即可
 
-<img src="images/20250105013358.gif" width="300" alt="配置演示">
+<img src="images/4.gif" width="300" alt="配置演示">
+
+### 4. 注意事项
+- 以上测试均基于IOS18.1.1版本。**老版本的一些快捷指令脚本不支持，需要更新到最新版本**。
+- 目前版本的快捷指令仍不稳定，会有偶发性地图片渲染失败。目前没想到好的解决办法，有高手可以指点一下感激不尽。
 
 ## 许可证
 
