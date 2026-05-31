@@ -1,10 +1,17 @@
 # 依赖目录
 node_modules/
+server/node_modules/
+worker/node_modules/
 
 # 环境配置文件
 .env
 .env.local
 .env.*.local
+
+# Wrangler（Worker 项目）
+worker/.wrangler/
+# 含 database_id 等敏感/本地值，通过 wrangler.toml.example 模板管理
+worker/wrangler.toml
 
 # 日志文件
 logs

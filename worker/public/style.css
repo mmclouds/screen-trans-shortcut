@@ -1,0 +1,382 @@
+/* ===== 基础 ===== */
+:root {
+  --touch-target: 44px;
+}
+
+/* ===== 图片对比 ===== */
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.compare-grid img {
+  width: 100%;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.compare-grid img:hover {
+  transform: scale(1.02);
+}
+
+.compare-grid figure {
+  margin: 0;
+}
+
+.compare-grid figcaption {
+  text-align: center;
+  margin-top: 0.5rem;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+}
+
+/* 移动端：图片上下堆叠 */
+@media (max-width: 768px) {
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 翻译卡片列表 ===== */
+.translation-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .translation-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.translation-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+  min-height: var(--touch-target);
+}
+
+.translation-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.translation-card img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-body .source-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.card-body .meta {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+
+/* ===== 分页 ===== */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.pagination button {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+}
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+  margin-bottom: 1rem;
+}
+
+.tab-btn {
+  flex: 1;
+  min-height: var(--touch-target);
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--pico-muted-color);
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn.active {
+  color: var(--pico-primary);
+  border-bottom-color: var(--pico-primary);
+  font-weight: 600;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+/* ===== 词汇卡片（移动端替代表格） ===== */
+.vocab-table {
+  width: 100%;
+}
+
+/* 桌面端正常表格 */
+@media (min-width: 768px) {
+  .vocab-table table {
+    width: 100%;
+  }
+
+  .vocab-cards {
+    display: none;
+  }
+}
+
+/* 移动端卡片布局 */
+@media (max-width: 767px) {
+  .vocab-table table {
+    display: none;
+  }
+
+  .vocab-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+.vocab-card,
+.grammar-card {
+  padding: 1rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 10px;
+}
+
+.vocab-card .word {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.vocab-card .meaning {
+  color: var(--pico-primary);
+  margin: 0.25rem 0;
+}
+
+.vocab-card .meta {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+
+.grammar-card .pattern {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.grammar-card .explanation {
+  margin: 0.25rem 0;
+}
+
+.grammar-card .example {
+  font-style: italic;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+/* 操作按钮 */
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  justify-content: flex-end;
+}
+
+.card-actions button {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+}
+
+/* ===== Lightbox ===== */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 2rem;
+}
+
+.lightbox.hidden {
+  display: none;
+}
+
+.lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  color: #fff;
+  font-size: 2rem;
+  cursor: pointer;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== Modal（全屏移动端） ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--pico-background-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .modal-content {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+  }
+}
+
+.modal-content h3 {
+  margin-bottom: 1rem;
+}
+
+.modal-content form {
+  margin: 0;
+}
+
+/* ===== 输入框（防 iOS 缩放） ===== */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--pico-contrast-background);
+  color: var(--pico-contrast);
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  z-index: 10000;
+  transition: opacity 0.3s;
+}
+
+.toast.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--pico-muted-color);
+}
+
+.empty-state .icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+/* ===== Back 按钮 ===== */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  min-height: var(--touch-target);
+}
+
+/* ===== 文本对比（原文/译文） ===== */
+.text-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.text-compare .text-block {
+  padding: 1rem;
+  background: var(--pico-card-background-color);
+  border-radius: 8px;
+}
+
+.text-compare .text-block h4 {
+  margin-bottom: 0.5rem;
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+@media (max-width: 767px) {
+  .text-compare {
+    grid-template-columns: 1fr;
+  }
+}

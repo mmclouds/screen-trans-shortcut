@@ -1,0 +1,14 @@
+name = "screen-trans-api"
+main = "src/index.ts"
+compatibility_date = "2025-05-31"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "screen-trans-db"
+database_id = ""  # 创建 D1 后从 wrangler d1 create 输出填入
+
+[assets]
+directory = "./public"
+
+[vars]
+WORKER_API_KEY = ""  # 设置 Worker API 共享密钥
