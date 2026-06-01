@@ -7,8 +7,35 @@ binding = "DB"
 database_name = "screen-trans-db"
 database_id = ""  # 创建 D1 后从 wrangler d1 create 输出填入
 
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "screen-trans-images"
+
+[images]
+binding = "IMAGES"
+
+[[queues.producers]]
+binding = "AI_QUEUE"
+queue = "screen-trans-ai"
+
+[[queues.consumers]]
+queue = "screen-trans-ai"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 3
+retry_delay = 60
+
 [assets]
 directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
 
 [vars]
 WORKER_API_KEY = ""  # 设置 Worker API 共享密钥
+API_PASSWORD = ""    # iOS 快捷指令访问密码
+TARGET_LANGUAGE = "zh"
+VOLC_ACCESS_KEY = ""
+VOLC_SECRET_KEY = ""
+R2_PUBLIC_URL = "https://pub-xxx.r2.dev"
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
+OPENROUTER_API_KEY= ""

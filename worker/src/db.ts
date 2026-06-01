@@ -109,6 +109,46 @@ export async function deleteTranslation(
   return success;
 }
 
+export async function saveAiExtraction(
+  db: D1Database,
+  translationId: string,
+  vocabulary: Omit<VocabInput, 'translation_id'>[],
+  grammar: Omit<GrammarInput, 'translation_id'>[]
+): Promise<boolean> {
+  const existing = await db
+    .prepare(`SELECT
+      (SELECT COUNT(*) FROM vocabulary WHERE translation_id = ?) as vocab_count,
+      (SELECT COUNT(*) FROM grammar_notes WHERE translation_id = ?) as grammar_count`)
+    .bind(translationId, translationId)
+    .first<{ vocab_count: number; grammar_count: number }>();
+
+  if (!existing || existing.vocab_count > 0 || existing.grammar_count > 0) {
+    return false;
+  }
+
+  const stmts = [];
+
+  for (const v of vocabulary) {
+    stmts.push(
+      db.prepare(`INSERT INTO vocabulary (translation_id, word, meaning, part_of_speech, context)
+        VALUES (?, ?, ?, ?, ?)`)
+        .bind(translationId, v.word, v.meaning, v.part_of_speech || '', v.context || '')
+    );
+  }
+
+  for (const g of grammar) {
+    stmts.push(
+      db.prepare(`INSERT INTO grammar_notes (translation_id, pattern, explanation, example)
+        VALUES (?, ?, ?, ?)`)
+        .bind(translationId, g.pattern, g.explanation, g.example || '')
+    );
+  }
+
+  if (stmts.length === 0) return true;
+  await db.batch(stmts);
+  return true;
+}
+
 // ---------- 词汇 ----------
 
 export async function addVocabulary(

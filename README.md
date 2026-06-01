@@ -16,14 +16,14 @@
 
 ```
 screen-trans-shortcut/
-├── server/                   # Express 服务（翻译核心 + R2 上传 + AI 提取）
+├── server/                   # 旧版 Express 服务（可选）
 │   ├── package.json
 │   ├── .env.example
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── ImagesTrans.js
 │
-├── worker/                   # Cloudflare Worker（API + 回顾页面一体）
+├── worker/                   # Cloudflare Worker（翻译 API + Queue AI 提取 + 回顾页面）
 │   ├── package.json
 │   ├── wrangler.toml.example
 │   ├── tsconfig.json
@@ -41,7 +41,7 @@ screen-trans-shortcut/
     └── DESIGN.md             # 详细设计文档
 ```
 
-两个子项目**独立部署**，无代码依赖。
+当前推荐直接部署 `worker/`：翻译、图片压缩、R2 持久化、D1 写入和 AI 队列提取都在 Worker 侧完成。
 
 ---
 
@@ -65,11 +65,17 @@ npx wrangler d1 create screen-trans-db
 # 将输出的 database_id 和 database_name 复制备用
 ```
 
-**3. 执行建表语句**
+**3. 创建 AI 队列**
+```bash
+cd worker
+npx wrangler queues create screen-trans-ai
+```
+
+**4. 执行建表语句**
 ```bash
 cd worker
 cp wrangler.toml.example wrangler.toml
-# 编辑 wrangler.toml，填入 database_id
+# 编辑 wrangler.toml，填入 database_id、R2_PUBLIC_URL、火山引擎配置等
 npx wrangler d1 execute screen-trans-db --file=schema.sql
 ```
 
@@ -168,7 +174,7 @@ npm install
 cp wrangler.toml.example wrangler.toml
 # 编辑 wrangler.toml：
 #   - 填入 database_id
-#   - 设置 WORKER_API_KEY
+#   - 设置 API_PASSWORD、TARGET_LANGUAGE、VOLC_*、R2_PUBLIC_URL
 
 # 3. 执行数据库迁移（首次）
 npx wrangler d1 execute screen-trans-db --file=schema.sql --local
@@ -185,6 +191,7 @@ cd worker
 
 # 1. 设置密钥
 npx wrangler secret put WORKER_API_KEY
+npx wrangler secret put OPENROUTER_API_KEY
 
 # 2. 执行数据库迁移（生产环境）
 npx wrangler d1 execute screen-trans-db --file=schema.sql --remote
@@ -195,6 +202,19 @@ npx wrangler deploy
 # 直接访问即可看到回顾页面
 ```
 
+#### Worker 变量说明
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `WORKER_API_KEY` | 是 | 后台写操作共享密钥，建议用 secret 设置 |
+| `API_PASSWORD` | 是 | iOS 快捷指令访问密码 |
+| `TARGET_LANGUAGE` | 是 | 目标翻译语言，如 `zh`/`en`/`ja`/`ko` |
+| `VOLC_ACCESS_KEY` | 是 | 火山引擎 Access Key |
+| `VOLC_SECRET_KEY` | 是 | 火山引擎 Secret Key |
+| `R2_PUBLIC_URL` | 是 | R2 公开访问地址 |
+| `OPENROUTER_API_KEY` | 否 | OpenRouter API Key，建议用 secret 设置 |
+| `OPENROUTER_MODEL` | 否 | 模型名，默认 `openai/gpt-4o-mini` |
+
 ---
 
 ## 架构说明
@@ -203,22 +223,16 @@ npx wrangler deploy
 iOS 快捷指令
     │  POST /  (base64 图片 + 密码)
     ▼
-Express (server/ImagesTrans.js)
+Cloudflare Worker
     │
+    ├─ Images binding ──→ 压缩截图
     ├─ 火山引擎 API ──→ 翻译图片
-    │
-    ├─ R2 ──→ 存储原文 + 译文图片（异步，失败不影响翻译）
-    │
-    ├─ OpenRouter API ──→ AI 提取词汇 + 语法（异步，失败不影响翻译）
-    │
-    └─ Worker API ──→ 写入 D1 数据库（异步，失败不影响翻译）
-                          │
-                          ▼
-              Worker ──→ /api/* (JSON API)
-                     ──→ /*     (回顾页面)
+    ├─ R2 ──→ 存储原文 + 译文图片
+    ├─ D1 ──→ 写入翻译记录
+    └─ Queue ──→ OpenRouter AI 提取词汇 + 语法，再写回 D1
 ```
 
-- **翻译请求不阻塞**：R2 上传、AI 提取、数据库写入均为异步，翻译图片实时返回
+- **翻译请求不等 AI**：图片翻译、R2 上传和 D1 记录写入完成后立即返回，AI 提取由 Queue 异步处理
 - **Worker 同源托管**：API 和前端部署在同一个 Worker，无 CORS 问题
 - **R2 公开访问**：图片存完整 URL，前端 `<img>` 直接加载，无需预签名
 

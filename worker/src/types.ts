@@ -20,6 +20,14 @@ export interface CreateTranslationBody {
   grammar?: Omit<GrammarInput, 'translation_id'>[];
 }
 
+export interface AiExtractionMessage {
+  translation_id: string;
+  source_text: string;
+  translated_text: string;
+  source_language: string;
+  target_language: string;
+}
+
 export interface VocabInput {
   translation_id: string;
   word: string;
