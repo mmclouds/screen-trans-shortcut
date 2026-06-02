@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "title": "Design System: Screen Translation Review",
+  "extensions": {
+    "colorMeta": {
+      "ink-primary": { "role": "primary", "displayName": "Ink Blue", "canonical": "oklch(34% 0.05 260)", "tonalRamp": ["oklch(15% 0.03 260)", "oklch(22% 0.04 260)", "oklch(28% 0.05 260)", "oklch(34% 0.05 260)", "oklch(42% 0.05 260)", "oklch(52% 0.04 260)", "oklch(65% 0.03 260)", "oklch(85% 0.01 260)"] },
+      "ink-primary-hover": { "role": "primary", "displayName": "Ink Blue Deep", "canonical": "oklch(22% 0.04 260)", "tonalRamp": [] },
+      "paper-bg": { "role": "neutral", "displayName": "Paper", "canonical": "oklch(98% 0 none)", "tonalRamp": [] },
+      "paper-surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(100% 0 none)", "tonalRamp": [] },
+      "ink-text": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(15% 0 none)", "tonalRamp": [] },
+      "ink-muted": { "role": "neutral", "displayName": "Muted", "canonical": "oklch(50% 0 none)", "tonalRamp": [] },
+      "ink-border": { "role": "neutral", "displayName": "Border", "canonical": "oklch(90% 0 none)", "tonalRamp": [] },
+      "ink-border-hover": { "role": "neutral", "displayName": "Border Hover", "canonical": "oklch(82% 0 none)", "tonalRamp": [] }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "All body text, card content, form labels. 16px floor." },
+      "title": { "displayName": "Title", "purpose": "Page and section headings. One level only." },
+      "label": { "displayName": "Label", "purpose": "Meta text, dates, language tags, tab labels." }
+    },
+    "shadows": [
+      { "name": "card-hover", "value": "0 2px 8px rgba(0,0,0,0.08)", "purpose": "Card lift on hover only. No static shadows." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for state transitions (hover, focus, active)." },
+      { "name": "ease-out", "value": "cubic-bezier(0, 0, 0.2, 1)", "purpose": "Exit transitions (toast dismiss, lightbox close)." },
+      { "name": "duration-fast", "value": "150ms", "purpose": "Micro-interactions: hover, focus, tab switch." },
+      { "name": "duration-normal", "value": "250ms", "purpose": "Toast enter/exit, modal open/close." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "0–767px" },
+      { "name": "desktop", "value": "768px+" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink-blue button for the single primary action on screen.",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary { background: #2c3e5a; color: #fff; padding: 10px 20px; border: none; border-radius: 6px; font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 16px; font-weight: 500; cursor: pointer; min-height: 44px; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #1a2d44; } .ds-btn-primary:focus-visible { outline: 2px solid #2c3e5a; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Transparent secondary button for Cancel, Back, or inline actions.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #6b6b6b; padding: 10px 20px; border: none; border-radius: 6px; font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 16px; font-weight: 500; cursor: pointer; min-height: 44px; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-ghost:hover { background: #e5e5e5; } .ds-btn-ghost:focus-visible { outline: 2px solid #2c3e5a; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Container for translation list items or content sections. Flat at rest with border separation.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-body\">Card content</div></div>",
+      "css": ".ds-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 16px; transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; } .ds-card:hover { border-color: #ccc; transform: translateY(-2px); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text field with clean border treatment.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Enter word\">",
+      "css": ".ds-input { background: #fff; color: #1a1a1a; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 14px; font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 16px; width: 100%; box-sizing: border-box; transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-input::placeholder { color: #6b6b6b; } .ds-input:focus { border-color: #2c3e5a; outline: 2px solid #2c3e5a; outline-offset: 2px; }"
+    },
+    {
+      "name": "Tab Bar",
+      "kind": "nav",
+      "refersTo": "tabs",
+      "description": "Horizontal tab switcher with bottom-border active indicator.",
+      "html": "<nav class=\"ds-tabs\"><button class=\"ds-tab active\">Vocabulary (3)</button><button class=\"ds-tab\">Grammar (2)</button></nav>",
+      "css": ".ds-tabs { display: flex; border-bottom: 2px solid #e5e5e5; gap: 0; } .ds-tab { flex: 1; padding: 12px 16px; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 0.9rem; font-weight: 500; color: #6b6b6b; cursor: pointer; min-height: 44px; transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-tab.active { color: #2c3e5a; border-bottom-color: #2c3e5a; } .ds-tab:hover:not(.active) { color: #1a1a1a; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Fixed bottom-center notification, auto-dismisses after 2.5s.",
+      "html": "<div class=\"ds-toast\">Saved</div>",
+      "css": ".ds-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #fff; color: #1a1a1a; border: 1px solid #e5e5e5; padding: 12px 24px; border-radius: 10px; font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 0.9rem; z-index: 1000; opacity: 1; transition: opacity 250ms cubic-bezier(0, 0, 0.2, 1); } .ds-toast.hidden { opacity: 0; pointer-events: none; }"
+    },
+    {
+      "name": "Lightbox Overlay",
+      "kind": "custom",
+      "refersTo": "lightbox",
+      "description": "Fullscreen image viewer, tap to dismiss.",
+      "html": "<div class=\"ds-lightbox\"><span class=\"ds-lightbox-close\">&times;</span><img src=\"\" alt=\"\"></div>",
+      "css": ".ds-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 32px; cursor: pointer; } .ds-lightbox.hidden { display: none; } .ds-lightbox img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 4px; } .ds-lightbox-close { position: absolute; top: 16px; right: 24px; color: #fff; font-size: 2rem; cursor: pointer; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Notebook",
+    "overview": "A digital notebook that stays out of the way. Like a well-made paper notebook — clean pages, clear ink, no decoration — this interface serves one purpose: to help you review translations and learn from them. The UI is a container, not a participant.\n\nThe system is monochrome-restrained: grayscale with a single muted blue accent that evokes fountain pen ink. No gradients, no loud shadows, no colorful badges. Everything on screen must justify itself. Typography does the heavy lifting — Inter, a workhorse sans-serif with excellent legibility at small sizes and clean proportions at display sizes.\n\nThis is a tool for one person. It doesn't need to impress; it needs to be clear, fast, and invisible. The best compliment is that you forget about the interface entirely.",
+    "keyCharacteristics": [
+      "Monochrome at rest, a single ink-blue accent on interaction",
+      "Typography-driven hierarchy; color is a signal, not decoration",
+      "Flat surfaces with hairline borders; no floating shadows",
+      "Dense but breathable — information-rich without feeling cramped",
+      "Mobile-first with desktop as a wider canvas, not a different design"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Ink Blue appears on ≤5% of any screen. Links, the active tab underline, the primary button. If you see blue in three places at once, something is over-signaling.", "section": "colors" },
+      { "name": "The No Tint Rule", "body": "Paper is achromatic — zero chroma, no warm or cool bias. The notebook is blank; the content provides the color.", "section": "colors" },
+      { "name": "The Single Weight Jump Rule", "body": "Title to Body is 400→600 weight and 1.25rem→1rem size. One step each. More contrast than that and the page starts shouting.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Shadows appear only as a response to interaction. No ambient/diffuse shadows. If it's not being interacted with, it's flat.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the system font stack as the first render; Inter loads as enhancement",
+      "Do keep spacing in multiples of 4px (4, 8, 16, 24, 32)",
+      "Do use 1px borders for separation instead of shadows",
+      "Do ensure every interactive element has a 44px minimum touch target",
+      "Do set font-size: 16px on all inputs to prevent iOS zoom"
+    ],
+    "donts": [
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe",
+      "Don't use gradient text, glassmorphism, or decorative blur",
+      "Don't use box-shadow + 1px border together on cards at rest (the ghost-card pattern)",
+      "Don't round cards beyond 14px or buttons beyond 8px",
+      "Don't use the Pico.css default blue (#1095c1) — too saturated for this system",
+      "Don't add SaaS landing-page clichés: hero metrics, gradient CTAs, numbered section markers, tiny uppercase tracked eyebrows",
+      "Don't use warm-tinted backgrounds (cream, sand, beige, paper-like warm tones). The Paper neutral is achromatic",
+      "Don't add emoji as icons in the UI. Use text labels or a consistent SVG icon set",
+      "Don't add more than one primary button per screen"
+    ]
+  }
+}

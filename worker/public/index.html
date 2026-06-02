@@ -1,27 +1,31 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Translation Review</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul>
-        <li><a href="#/" class="brand"><strong>Translation Review</strong></a></li>
-      </ul>
-    </nav>
+  <header class="site-header">
+    <div class="container">
+      <a href="#/" class="brand">Translation Review</a>
+    </div>
   </header>
 
-  <main class="container" id="app"></main>
+  <main class="site-main">
+    <div class="container" id="app"></div>
+  </main>
 
   <!-- Image Lightbox -->
   <div id="lightbox" class="lightbox hidden">
-    <span class="lightbox-close">&times;</span>
-    <img src="" alt="" id="lightbox-img">
+    <button class="lightbox-close" aria-label="Close">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <img src="" alt="Enlarged view" id="lightbox-img">
   </div>
 
   <!-- Toast -->

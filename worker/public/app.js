@@ -1,9 +1,17 @@
+// ===== SVG 图标 =====
+const Icons = {
+  arrowLeft: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  book: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+  edit: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  trash: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
+  plus: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  x: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+};
+
 // ===== 配置 =====
-// 同源部署，Worker 同时托管 API 和静态页面
 const API_BASE = '/api';
 let WORKER_API_KEY = '';
 
-// ===== 初始化 =====
 async function init() {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
@@ -70,15 +78,16 @@ function openModal(title, fields, onSubmit) {
       <h3>${title}</h3>
       <form id="modal-form">
         ${fields.map(f => `
-          <label>${f.label}
+          <div class="form-group">
+            <label>${f.label}</label>
             ${f.type === 'textarea'
-              ? `<textarea name="${f.name}" required>${f.value || ''}</textarea>`
-              : `<input type="${f.type || 'text'}" name="${f.name}" value="${f.value || ''}" required>`}
-          </label>
+              ? `<textarea class="input" name="${f.name}" required>${escHtmlAttr(f.value || '')}</textarea>`
+              : `<input class="input" type="${f.type || 'text'}" name="${f.name}" value="${escHtmlAttr(f.value || '')}" required>`}
+          </div>
         `).join('')}
-        <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-          <button type="submit" class="primary">Save</button>
-          <button type="button" class="secondary close-modal">Cancel</button>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-ghost close-modal">Cancel</button>
         </div>
       </form>
     </div>
@@ -100,7 +109,7 @@ function openModal(title, fields, onSubmit) {
 
 // ===== 列表页 =====
 async function renderList(app) {
-  app.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>Loading...</p></div>';
+  app.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>';
 
   try {
     const page = parseInt(new URLSearchParams(location.search).get('page') || '1');
@@ -109,7 +118,7 @@ async function renderList(app) {
     if (!result.data.length) {
       app.innerHTML = `
         <div class="empty-state">
-          <div class="icon">📭</div>
+          <span class="empty-icon">${Icons.book}</span>
           <p>No translations yet</p>
           <small>Send a translation from your device to get started.</small>
         </div>`;
@@ -117,10 +126,11 @@ async function renderList(app) {
     }
 
     app.innerHTML = `
+      <h1 class="page-title">Translation History</h1>
       <div class="translation-list">
         ${result.data.map(t => `
-          <a href="#/translation/${t.id}" class="translation-card" style="text-decoration:none;color:inherit;">
-            <img src="${escAttr(t.translated_image_url)}" alt="translated" loading="lazy">
+          <a href="#/translation/${t.id}" class="translation-card">
+            <img src="${escAttr(t.translated_image_url)}" alt="Translated screenshot" loading="lazy">
             <div class="card-body">
               <div class="source-text">${escHtml(t.source_text || '(no text detected)')}</div>
               <div class="meta">
@@ -142,27 +152,27 @@ function renderPagination(p) {
   if (p.totalPages <= 1) return '';
   const items = [];
   for (let i = 1; i <= p.totalPages; i++) {
-    items.push(`<li><a href="#/?page=${i}" class="${i === p.page ? 'primary' : 'secondary'}">${i}</a></li>`);
+    items.push(`<li><a href="#/?page=${i}" class="${i === p.page ? 'primary' : ''}">${i}</a></li>`);
   }
   return `<nav class="pagination"><ul>${items.join('')}</ul></nav>`;
 }
 
 // ===== 详情页 =====
 async function renderDetail(app, id) {
-  app.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>Loading...</p></div>';
+  app.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>';
 
   try {
     const t = await api(`/translations/${id}`);
     app.innerHTML = `
-      <a href="#/" class="back-link">← Back</a>
+      <a href="#/" class="back-link">${Icons.arrowLeft} Back</a>
 
       <div class="compare-grid">
         <figure>
-          <img src="${escAttr(t.original_image_url)}" alt="Original" loading="lazy" onclick="openLightbox('${escAttr(t.original_image_url)}')">
+          <img src="${escAttr(t.original_image_url)}" alt="Original screenshot" loading="lazy" onclick="openLightbox('${escAttr(t.original_image_url)}')">
           <figcaption>Original</figcaption>
         </figure>
         <figure>
-          <img src="${escAttr(t.translated_image_url)}" alt="Translated" loading="lazy" onclick="openLightbox('${escAttr(t.translated_image_url)}')">
+          <img src="${escAttr(t.translated_image_url)}" alt="Translated screenshot" loading="lazy" onclick="openLightbox('${escAttr(t.translated_image_url)}')">
           <figcaption>Translated</figcaption>
         </figure>
       </div>
@@ -180,7 +190,7 @@ async function renderDetail(app, id) {
         </div>
       ` : ''}
 
-      <div class="meta" style="margin-bottom:1rem;color:var(--pico-muted-color);font-size:0.85rem;">
+      <div class="detail-meta">
         Translated at ${formatDate(t.created_at)}
       </div>
 
@@ -192,22 +202,26 @@ async function renderDetail(app, id) {
 
       <!-- Vocabulary Panel -->
       <div class="tab-panel active" id="panel-vocab">
-        <div style="margin-bottom:0.75rem;">
-          <button class="primary" onclick="addVocab('${t.id}')" style="min-height:44px;">+ Add Word</button>
+        <div class="toolbar">
+          <span></span>
+          <button class="btn btn-primary btn-sm add-vocab-btn">
+            ${Icons.plus} Add Word
+          </button>
         </div>
-        <div class="vocab-table">
-          <table>
-            <thead><tr><th>Word</th><th>Meaning</th><th>POS</th><th>Context</th><th></th></tr></thead>
-            <tbody>${t.vocabulary.map(v => vocabRow(t.id, v, false)).join('')}</tbody>
-          </table>
-        </div>
-        <div class="vocab-cards">${t.vocabulary.map(v => vocabRow(t.id, v, true)).join('')}</div>
+        <table class="data-table vocab-table">
+          <thead><tr><th>Word</th><th>Meaning</th><th>POS</th><th>Context</th><th></th></tr></thead>
+          <tbody>${t.vocabulary.map(v => vocabRow(t.id, v)).join('')}</tbody>
+        </table>
+        <div class="vocab-cards">${t.vocabulary.map(v => vocabCard(t.id, v)).join('')}</div>
       </div>
 
       <!-- Grammar Panel -->
       <div class="tab-panel" id="panel-grammar">
-        <div style="margin-bottom:0.75rem;">
-          <button class="primary" onclick="addGrammar('${t.id}')" style="min-height:44px;">+ Add Grammar</button>
+        <div class="toolbar">
+          <span></span>
+          <button class="btn btn-primary btn-sm add-grammar-btn">
+            ${Icons.plus} Add Grammar
+          </button>
         </div>
         ${t.grammar.map(g => grammarCard(t.id, g)).join('')}
       </div>
@@ -223,7 +237,17 @@ async function renderDetail(app, id) {
       });
     });
 
-    // 删除按钮
+    // 添加按钮
+    const addVocabBtn = app.querySelector('.add-vocab-btn');
+    if (addVocabBtn) {
+      addVocabBtn.addEventListener('click', () => addVocab(id));
+    }
+    const addGrammarBtn = app.querySelector('.add-grammar-btn');
+    if (addGrammarBtn) {
+      addGrammarBtn.addEventListener('click', () => addGrammar(id));
+    }
+
+    // 删除 & 编辑按钮
     app.querySelectorAll('.del-vocab').forEach(btn => {
       btn.addEventListener('click', async function () {
         if (!confirm('Delete this word?')) return;
@@ -258,7 +282,7 @@ async function renderDetail(app, id) {
 }
 
 // ===== 词汇/语法 增删改 =====
-window.addVocab = async function (translationId) {
+function addVocab(translationId) {
   openModal('Add Word', [
     { name: 'word', label: 'Word' },
     { name: 'meaning', label: 'Meaning' },
@@ -272,9 +296,9 @@ window.addVocab = async function (translationId) {
     showToast('Word added');
     location.reload();
   });
-};
+}
 
-async function editVocab(translationId, data) {
+function editVocab(translationId, data) {
   openModal('Edit Word', [
     { name: 'word', label: 'Word', value: data.word },
     { name: 'meaning', label: 'Meaning', value: data.meaning },
@@ -289,7 +313,7 @@ async function editVocab(translationId, data) {
   });
 }
 
-window.addGrammar = async function (translationId) {
+function addGrammar(translationId) {
   openModal('Add Grammar', [
     { name: 'pattern', label: 'Pattern' },
     { name: 'explanation', label: 'Explanation', type: 'textarea' },
@@ -302,12 +326,12 @@ window.addGrammar = async function (translationId) {
     showToast('Grammar added');
     location.reload();
   });
-};
+}
 
-async function editGrammar(translationId, data) {
+function editGrammar(translationId, data) {
   openModal('Edit Grammar', [
     { name: 'pattern', label: 'Pattern', value: data.pattern },
-    { name: 'explanation', label: 'Explanation', value: data.explanation, type: 'textarea' },
+    { name: 'explanation', label: 'Explanation', type: 'textarea', value: data.explanation },
     { name: 'example', label: 'Example', value: data.example },
   ], async (formData) => {
     await api(`/translations/${translationId}/grammar/${data.gid}`, {
@@ -318,44 +342,44 @@ async function editGrammar(translationId, data) {
   });
 }
 
-// ===== 词汇行渲染 =====
-function vocabRow(tid, v, isCard) {
-  if (isCard) {
-    return `
-      <div class="vocab-card">
-        <div class="word">${escHtml(v.word)} <small>${escHtml(v.part_of_speech || '')}</small></div>
-        <div class="meaning">${escHtml(v.meaning)}</div>
-        ${v.context ? `<div class="meta">Context: ${escHtml(v.context)}</div>` : ''}
-        <div class="card-actions">
-          <button class="secondary edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">Edit</button>
-          <button class="contrast del-vocab" data-vid="${v.id}">Delete</button>
-        </div>
-      </div>`;
-  }
+// ===== 词汇/语法 渲染 =====
+function vocabRow(tid, v) {
   return `<tr>
     <td><strong>${escHtml(v.word)}</strong></td>
     <td>${escHtml(v.meaning)}</td>
     <td>${escHtml(v.part_of_speech || '-')}</td>
     <td>${escHtml(v.context || '-')}</td>
     <td>
-      <div style="display:flex;gap:0.25rem;">
-        <button class="secondary edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">Edit</button>
-        <button class="contrast del-vocab" data-vid="${v.id}">Del</button>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
+        <button class="btn btn-danger btn-sm del-vocab" data-vid="${v.id}">${Icons.trash}</button>
       </div>
     </td>
   </tr>`;
 }
 
-// ===== 语法卡片渲染 =====
+function vocabCard(tid, v) {
+  return `
+    <div class="item-card vocab-card">
+      <div class="item-title">${escHtml(v.word)} <small style="font-weight:400;color:var(--ink-muted);">${escHtml(v.part_of_speech || '')}</small></div>
+      <div class="item-subtitle">${escHtml(v.meaning)}</div>
+      ${v.context ? `<div class="item-meta">Context: ${escHtml(v.context)}</div>` : ''}
+      <div class="item-actions">
+        <button class="btn btn-ghost btn-sm edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
+        <button class="btn btn-danger btn-sm del-vocab" data-vid="${v.id}">${Icons.trash}</button>
+      </div>
+    </div>`;
+}
+
 function grammarCard(tid, g) {
   return `
-    <div class="grammar-card" style="margin-bottom:0.75rem;">
-      <div class="pattern">${escHtml(g.pattern)}</div>
-      <div class="explanation">${escHtml(g.explanation)}</div>
-      ${g.example ? `<div class="example">Example: ${escHtml(g.example)}</div>` : ''}
-      <div class="card-actions">
-        <button class="secondary edit-grammar" data-gid="${g.id}" data-pattern="${escAttr(g.pattern)}" data-explanation="${escAttr(g.explanation)}" data-example="${escAttr(g.example || '')}">Edit</button>
-        <button class="contrast del-grammar" data-gid="${g.id}">Delete</button>
+    <div class="item-card grammar-card" style="margin-bottom:var(--space-sm);">
+      <div class="item-title">${escHtml(g.pattern)}</div>
+      <div class="item-meta" style="margin:var(--space-xs) 0;">${escHtml(g.explanation)}</div>
+      ${g.example ? `<div class="item-meta" style="font-style:italic;">Example: ${escHtml(g.example)}</div>` : ''}
+      <div class="item-actions">
+        <button class="btn btn-ghost btn-sm edit-grammar" data-gid="${g.id}" data-pattern="${escAttr(g.pattern)}" data-explanation="${escAttr(g.explanation)}" data-example="${escAttr(g.example || '')}">${Icons.edit}</button>
+        <button class="btn btn-danger btn-sm del-grammar" data-gid="${g.id}">${Icons.trash}</button>
       </div>
     </div>`;
 }
@@ -365,6 +389,10 @@ function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function escHtmlAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escAttr(s) {
