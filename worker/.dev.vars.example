@@ -1,0 +1,5 @@
+WORKER_API_KEY="dev-worker-api-key"
+API_PASSWORD="dev-shortcut-password"
+VOLC_ACCESS_KEY="your-volc-access-key"
+VOLC_SECRET_KEY="your-volc-secret-key"
+OPENROUTER_API_KEY="sk-or-v1-xxx"

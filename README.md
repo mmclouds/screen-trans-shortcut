@@ -16,16 +16,12 @@
 
 ```
 screen-trans-shortcut/
-├── server/                   # 旧版 Express 服务（可选）
-│   ├── package.json
-│   ├── .env.example
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── ImagesTrans.js
-│
 ├── worker/                   # Cloudflare Worker（翻译 API + Queue AI 提取 + 回顾页面）
 │   ├── package.json
+│   ├── wrangler.toml         # 本地创建，包含资源绑定，不提交
 │   ├── wrangler.toml.example
+│   ├── .dev.vars             # 本地创建，存放本地调试密钥，不提交
+│   ├── .dev.vars.example
 │   ├── tsconfig.json
 │   ├── schema.sql
 │   ├── src/
@@ -45,7 +41,229 @@ screen-trans-shortcut/
 
 ---
 
-## 服务端部署
+## Worker 本地调试
+
+当前项目只需要调试 `worker/` 目录。`server/` 是旧版 Express 实现，不再作为推荐运行路径。
+
+### 本地 D1 和远程 D1 是什么关系
+
+Wrangler 本地调试时默认使用本地模拟资源：
+
+- `npx wrangler dev`：连接本地 D1、本地 R2、本地 Queue，数据保存在 `worker/.wrangler/` 下。
+- `npx wrangler d1 execute screen-trans-db --file=schema.sql --local`：给本地 D1 建表。
+- `npx wrangler d1 execute screen-trans-db --file=schema.sql --remote`：给 Cloudflare 线上 D1 建表或迁移。
+
+所以一般不需要在 Cloudflare 上为了“本地调试”再创建第二个 D1。你只需要：
+
+1. 线上有一份真实 D1，用于生产 Worker。
+2. 本地由 Wrangler 自动维护一份本地 D1，用于 `wrangler dev`。
+
+如果你想做“云端测试环境”，才需要额外创建一份 Cloudflare D1，例如 `screen-trans-db-staging`，并用 Wrangler environment 单独绑定它。普通本地调试不用这么做。
+
+注意：普通 `wrangler dev` 下 R2 也是本地模拟的，但当前代码写入数据库的图片地址来自 `R2_PUBLIC_URL`。如果用本地 R2，记录能写入本地 D1，翻译接口也能返回译图 base64，但回顾页面里的图片 URL 可能无法通过公网 `r2.dev` 打开。要完整验证线上图片展示，可以部署后验证，或谨慎使用 `wrangler dev --remote` 连接远程资源。
+
+### 本地变量放哪里
+
+本地调试涉及两类配置：
+
+| 文件 | 是否提交 | 适合放什么 |
+|------|----------|------------|
+| `worker/wrangler.toml` | 否 | Worker 名称、D1/R2/Queue 绑定、非敏感变量 |
+| `worker/.dev.vars` | 否 | 本地调试密钥，如 `API_PASSWORD`、`VOLC_ACCESS_KEY`、`VOLC_SECRET_KEY`、`OPENROUTER_API_KEY` |
+| Cloudflare Secrets | 线上保存 | 生产密钥，通过 `wrangler secret put` 设置 |
+
+`wrangler.toml` 与 `.dev.vars` 都放在 `worker/` 目录，也就是 Wrangler 配置文件同级目录。
+
+本地示例：
+
+```bash
+cd worker
+cp wrangler.toml.example wrangler.toml
+cp .dev.vars.example .dev.vars
+```
+
+然后编辑 `worker/wrangler.toml`：
+
+```toml
+name = "screen-trans-api"
+main = "src/index.ts"
+compatibility_date = "2025-05-31"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "screen-trans-db"
+database_id = "线上 D1 的 database_id"
+
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "screen-trans-images"
+
+[vars]
+TARGET_LANGUAGE = "zh"
+R2_PUBLIC_URL = "https://pub-xxx.r2.dev"
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
+```
+
+再编辑 `worker/.dev.vars`：
+
+```dotenv
+WORKER_API_KEY="dev-worker-api-key"
+API_PASSWORD="dev-shortcut-password"
+VOLC_ACCESS_KEY="your-volc-access-key"
+VOLC_SECRET_KEY="your-volc-secret-key"
+OPENROUTER_API_KEY="sk-or-v1-xxx"
+```
+
+### 首次本地启动
+
+```bash
+cd worker
+
+# 1. 安装依赖
+npm install
+
+# 2. 初始化本地 D1 表结构
+npx wrangler d1 execute screen-trans-db --file=schema.sql --local
+
+# 3. 启动本地 Worker
+npm run dev
+```
+
+启动后访问：
+
+```text
+http://localhost:8787
+```
+
+回顾页面、API、静态资源都会从本地 Worker 提供。
+
+### 本地接口测试
+
+```bash
+curl -X POST http://localhost:8787/api/translate \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"<base64图片>\",\"password\":\"dev-shortcut-password\"}"
+```
+
+也可以直接请求列表接口检查本地 D1：
+
+```bash
+curl http://localhost:8787/api/translations
+```
+
+查看本地 D1 内容：
+
+```bash
+npx wrangler d1 execute screen-trans-db --local --command "SELECT id, created_at FROM translations ORDER BY created_at DESC LIMIT 5"
+```
+
+### 本地执行图片压缩
+
+图片压缩不是单独的命令，而是在翻译接口里自动执行：
+
+```text
+POST /api/translate
+  -> compressImage(env.IMAGES, ...)
+  -> translateImage(...)
+  -> R2 写入
+  -> D1 写入
+  -> AI_QUEUE.send(...)
+```
+
+所以本地执行压缩的方式就是启动 Worker 后调用翻译接口：
+
+```bash
+cd worker
+npm run dev
+```
+
+另一个终端请求：
+
+```bash
+curl -X POST http://localhost:8787/api/translate \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"<base64图片>\",\"password\":\"dev-shortcut-password\"}"
+```
+
+默认 `wrangler dev` 会使用本地模拟的 Images binding。Cloudflare Images 的本地模拟能力有限，如果要验证更接近线上的压缩/转换效果，可以临时把 `worker/wrangler.toml` 改成：
+
+```toml
+[images]
+binding = "IMAGES"
+remote = true
+```
+
+然后继续用：
+
+```bash
+npm run dev
+```
+
+这样 Worker 代码仍在本地跑，但 Images binding 会连接 Cloudflare 远程能力。只想完全按线上环境跑时，也可以用 `npx wrangler dev --remote`，但它会连接远程绑定，可能写入线上 R2、D1、Queue。
+
+### 本地执行队列
+
+本地不需要创建真实 Queue。只要 `wrangler.toml` 里有 producer 和 consumer 配置，`npm run dev` 会启动本地模拟 Queue：
+
+```toml
+[[queues.producers]]
+binding = "AI_QUEUE"
+queue = "screen-trans-ai"
+
+[[queues.consumers]]
+queue = "screen-trans-ai"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 3
+retry_delay = 60
+```
+
+触发队列有两种方式：
+
+1. 调用 `/api/translate`，翻译成功并且识别出 `source_text` 后，会自动执行 `AI_QUEUE.send(...)`。
+2. 对已有翻译记录调用 AI 重试接口：
+
+```bash
+curl -X POST http://localhost:8787/api/translations/<translation_id>/ai/retry \
+  -H "Authorization: Bearer dev-worker-api-key"
+```
+
+如果本地 `.dev.vars` 没有配置 `OPENROUTER_API_KEY`，队列会被跳过或重试接口返回配置错误。要完整跑通 Queue consumer，需要：
+
+```dotenv
+OPENROUTER_API_KEY="sk-or-v1-xxx"
+```
+
+Worker 终端里能看到类似日志：
+
+```text
+AI 队列已投递: <translation_id>
+AI 队列消费批次: 1
+AI 队列消息完成: <translation_id> ...
+```
+
+### 调试远程线上数据
+
+谨慎使用远程命令，它们会直接读写线上资源。
+
+查询线上 D1：
+
+```bash
+npx wrangler d1 execute screen-trans-db --remote --command "SELECT id, created_at FROM translations ORDER BY created_at DESC LIMIT 5"
+```
+
+本地启动但连接远程资源：
+
+```bash
+npx wrangler dev --remote
+npx wrangler login --browser=false (不自动跳转浏览器)
+```
+
+这适合排查“线上绑定/Cloudflare 环境才出现”的问题，但翻译记录、R2 图片、Queue 消息可能会写入生产资源。日常开发建议使用普通 `npm run dev`。
+
+---
+
+## 线上部署
 
 ### 前置：Cloudflare 基础设施
 
@@ -56,7 +274,6 @@ screen-trans-shortcut/
 - 创建 Bucket，名称如 `screen-trans-images`
 - **开启 Public Access**（通过 `r2.dev` 域名公开访问）
 - 记录 `R2_PUBLIC_URL`（格式 `https://pub-xxx.r2.dev`）
-- 生成 R2 API Token（Access Key ID + Secret Access Key），记录 `R2_ENDPOINT`
 
 **2. 创建 D1 数据库**
 ```bash
@@ -75,122 +292,22 @@ npx wrangler queues create screen-trans-ai
 ```bash
 cd worker
 cp wrangler.toml.example wrangler.toml
-# 编辑 wrangler.toml，填入 database_id、R2_PUBLIC_URL、火山引擎配置等
-npx wrangler d1 execute screen-trans-db --file=schema.sql
+# 编辑 wrangler.toml，填入 database_id、R2_PUBLIC_URL 等非敏感配置
+npx wrangler d1 execute screen-trans-db --file=schema.sql --remote
 ```
 
 ---
 
-### 一、Server（Express 翻译服务）
-
-#### 本地开发
-
-```bash
-cd server
-
-# 1. 安装依赖
-npm install
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入必要的配置
-
-# 3. 启动
-node ImagesTrans.js
-# Server running on port 3000
-```
-
-#### `.env` 环境变量说明
-
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `TARGET_LANGUAGE` | 是 | 目标翻译语言，如 `zh`/`en`/`ja`/`ko` |
-| `API_PASSWORD` | 是 | iOS 快捷指令访问密码 |
-| `VOLC_ACCESS_KEY` | 是 | 火山引擎 Access Key |
-| `VOLC_SECRET_KEY` | 是 | 火山引擎 Secret Key |
-| `R2_ENDPOINT` | 否 | R2 S3 端点，如 `https://<id>.r2.cloudflarestorage.com` |
-| `R2_ACCESS_KEY_ID` | 否 | R2 API Token Access Key |
-| `R2_SECRET_ACCESS_KEY` | 否 | R2 API Token Secret |
-| `R2_BUCKET` | 否 | R2 存储桶名称 |
-| `R2_PUBLIC_URL` | 否 | R2 公开访问地址 |
-| `WORKER_API_URL` | 否 | Worker 部署后的 URL |
-| `WORKER_API_KEY` | 否 | Worker 共享密钥 |
-| `OPENROUTER_API_KEY` | 否 | OpenRouter API Key（AI 词汇提取） |
-| `OPENROUTER_MODEL` | 否 | 模型名，默认 `openai/gpt-4o-mini` |
-
-> 未配置 AI/Worker/R2 时，翻译功能正常工作，仅跳过持久化和 AI 提取。
-
-#### 本地测试
-
-```bash
-curl -X POST http://localhost:3000 \
-  -H "Content-Type: application/json" \
-  -d '{"message":"<base64图片>","password":"你的密码"}'
-```
-
-#### Docker 部署
-
-```bash
-cd server
-
-# Docker Compose（推荐）
-cp .env.example .env
-# 编辑 .env 填入配置
-docker-compose up -d
-docker-compose logs -f
-
-# 或直接 docker run
-docker run -d \
-  --name screen-trans \
-  -p 3000:3000 \
-  -e TARGET_LANGUAGE=zh \
-  -e API_PASSWORD=your_password \
-  -e VOLC_ACCESS_KEY=your_access_key \
-  -e VOLC_SECRET_KEY=your_secret_key \
-  -e R2_ENDPOINT=https://xxx.r2.cloudflarestorage.com \
-  -e R2_ACCESS_KEY_ID=xxx \
-  -e R2_SECRET_ACCESS_KEY=xxx \
-  -e R2_BUCKET=screen-trans-images \
-  -e R2_PUBLIC_URL=https://pub-xxx.r2.dev \
-  -e WORKER_API_URL=https://screen-trans-api.xxx.workers.dev \
-  -e WORKER_API_KEY=xxx \
-  -e OPENROUTER_API_KEY=sk-or-v1-xxx \
-  mmclouds/screen-trans-shortcut
-```
-
----
-
-### 二、Worker（API + 回顾页面）
-
-#### 本地开发
+### 部署上线
 
 ```bash
 cd worker
 
-# 1. 安装依赖
-npm install
-
-# 2. 配置
-cp wrangler.toml.example wrangler.toml
-# 编辑 wrangler.toml：
-#   - 填入 database_id
-#   - 设置 API_PASSWORD、TARGET_LANGUAGE、VOLC_*、R2_PUBLIC_URL
-
-# 3. 执行数据库迁移（首次）
-npx wrangler d1 execute screen-trans-db --file=schema.sql --local
-
-# 4. 本地启动（含前端热更新）
-npx wrangler dev
-# 访问 http://localhost:8787 即可看到回顾页面
-```
-
-#### 部署上线
-
-```bash
-cd worker
-
-# 1. 设置密钥
+# 1. 设置生产密钥
 npx wrangler secret put WORKER_API_KEY
+npx wrangler secret put API_PASSWORD
+npx wrangler secret put VOLC_ACCESS_KEY
+npx wrangler secret put VOLC_SECRET_KEY
 npx wrangler secret put OPENROUTER_API_KEY
 
 # 2. 执行数据库迁移（生产环境）
@@ -202,17 +319,17 @@ npx wrangler deploy
 # 直接访问即可看到回顾页面
 ```
 
-#### Worker 变量说明
+### Worker 变量说明
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `WORKER_API_KEY` | 是 | 后台写操作共享密钥，建议用 secret 设置 |
-| `API_PASSWORD` | 是 | iOS 快捷指令访问密码 |
-| `TARGET_LANGUAGE` | 是 | 目标翻译语言，如 `zh`/`en`/`ja`/`ko` |
-| `VOLC_ACCESS_KEY` | 是 | 火山引擎 Access Key |
-| `VOLC_SECRET_KEY` | 是 | 火山引擎 Secret Key |
+| `WORKER_API_KEY` | 是 | 后台写操作共享密钥。本地放 `.dev.vars`，线上用 secret |
+| `API_PASSWORD` | 是 | iOS 快捷指令访问密码。本地放 `.dev.vars`，线上用 secret |
+| `TARGET_LANGUAGE` | 是 | 目标翻译语言，如 `zh`/`en`/`ja`/`ko`。可放 `wrangler.toml` |
+| `VOLC_ACCESS_KEY` | 是 | 火山引擎 Access Key。本地放 `.dev.vars`，线上用 secret |
+| `VOLC_SECRET_KEY` | 是 | 火山引擎 Secret Key。本地放 `.dev.vars`，线上用 secret |
 | `R2_PUBLIC_URL` | 是 | R2 公开访问地址 |
-| `OPENROUTER_API_KEY` | 否 | OpenRouter API Key，建议用 secret 设置 |
+| `OPENROUTER_API_KEY` | 否 | OpenRouter API Key。本地放 `.dev.vars`，线上用 secret |
 | `OPENROUTER_MODEL` | 否 | 模型名，默认 `openai/gpt-4o-mini` |
 
 ---

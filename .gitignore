@@ -7,6 +7,7 @@ worker/node_modules/
 .env
 .env.local
 .env.*.local
+worker/.dev.vars
 
 # Wrangler（Worker 项目）
 worker/.wrangler/
