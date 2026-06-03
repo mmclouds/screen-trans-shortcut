@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import * as db from './db';
-import type { AiExtractionMessage, CreateTranslationBody, TextBlock } from './types';
+import type { AiExtractionMessage, CreateTranslationBody, Familiarity, TextBlock } from './types';
 
 type Env = {
   DB: D1Database;
@@ -193,6 +193,118 @@ app.post('/api/translations/:id/ai/retry', auth, async (c) => {
 
   console.log('AI 队列手动重试已投递:', id);
   return c.json({ success: true, id });
+});
+
+// ========== 每日复习 ==========
+
+app.get('/api/days/:date/summary', async (c) => {
+  try {
+    return c.json(await db.getDaySummary(c.env.DB, c.req.param('date')));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid date' }, 400);
+  }
+});
+
+app.get('/api/days/:date/translations', async (c) => {
+  try {
+    const pendingOnly = c.req.query('pending') === '1';
+    return c.json(await db.listDayTranslations(c.env.DB, c.req.param('date'), pendingOnly));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid date' }, 400);
+  }
+});
+
+app.get('/api/days/:date/words', async (c) => {
+  try {
+    return c.json(await db.listDayWords(c.env.DB, c.req.param('date')));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid date' }, 400);
+  }
+});
+
+// ========== 候选审核 ==========
+
+const familiaritySchema = z.enum(['unknown', 'learning', 'mastered']);
+
+const updateCandidateSchema = z.object({
+  word: z.string().min(1).optional(),
+  meaning: z.string().min(1).optional(),
+  part_of_speech: z.string().optional(),
+  context: z.string().optional(),
+});
+
+const acceptCandidateSchema = z.object({
+  familiarity: familiaritySchema.default('unknown'),
+});
+
+app.put('/api/translation-vocabulary/:id', auth, zValidator('json', updateCandidateSchema), async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json();
+  const ok = await db.updateTranslationVocabulary(c.env.DB, id, body);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+app.post('/api/translation-vocabulary/:id/accept', auth, zValidator('json', acceptCandidateSchema), async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json<{ familiarity: Familiarity }>();
+  const word = await db.acceptTranslationVocabulary(c.env.DB, id, body.familiarity);
+  if (!word) return c.json({ error: 'Not found' }, 404);
+  return c.json(word);
+});
+
+app.post('/api/translation-vocabulary/:id/reject', auth, async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const ok = await db.rejectTranslationVocabulary(c.env.DB, id);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+app.post('/api/grammar-notes/:id/accept', auth, async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const ok = await db.acceptGrammarNote(c.env.DB, id);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+app.post('/api/grammar-notes/:id/reject', auth, async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const ok = await db.rejectGrammarNote(c.env.DB, id);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+// ========== 全局单词本 ==========
+
+const updateWordSchema = z.object({
+  word: z.string().min(1).optional(),
+  meaning: z.string().min(1).optional(),
+  part_of_speech: z.string().optional(),
+  familiarity: familiaritySchema.optional(),
+});
+
+app.get('/api/words', async (c) => {
+  const familiarity = c.req.query('familiarity') as Familiarity | undefined;
+  return c.json(await db.listWords(c.env.DB, {
+    q: c.req.query('q') || undefined,
+    familiarity: familiarity && ['unknown', 'learning', 'mastered'].includes(familiarity) ? familiarity : undefined,
+    sort: c.req.query('sort') || undefined,
+  }));
+});
+
+app.get('/api/words/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const word = await db.getWord(c.env.DB, id);
+  if (!word) return c.json({ error: 'Not found' }, 404);
+  return c.json(word);
+});
+
+app.put('/api/words/:id', auth, zValidator('json', updateWordSchema), async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json();
+  const ok = await db.updateWord(c.env.DB, id, body);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
 });
 
 // ========== 词汇 ==========
@@ -505,7 +617,7 @@ export default {
           return;
         }
         const result = await extractAI(env, message.body);
-        await db.saveAiExtraction(env.DB, message.body.translation_id, result.vocabulary, result.grammar);
+        await db.saveAiExtractionCandidates(env.DB, message.body.translation_id, result.vocabulary, result.grammar);
         console.log('AI 队列消息完成:', message.body.translation_id, result.vocabulary.length, result.grammar.length);
         message.ack();
       } catch (error) {

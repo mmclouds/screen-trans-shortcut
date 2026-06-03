@@ -1,123 +1,123 @@
-# English Review Workflow Design
+# 英语复习工作流设计
 
-## Goal
+## 目标
 
-Turn the current screen translation tool into a daily English review system.
+把当前的屏幕翻译工具升级成一个每日英语复习系统。
 
-The product should still support fast screen translation, but the main value should become reviewing and organizing what was learned from those translations. The first version should prioritize a daily review workflow and also support a global word notebook.
+产品仍然要保留快速屏幕翻译能力，但核心价值要从“翻译一次”转向“把翻译中遇到的内容整理、确认并复习”。第一版优先做好每日复习工作流，同时支持全局单词本。
 
-## User Experience
+## 用户体验
 
-The app has three primary areas:
+应用包含三个主要区域：
 
 1. **Today**
-   - Default entry point.
-   - Shows one selected day, defaulting to today.
-   - Supports switching to previous or future dates.
-   - Contains two review dimensions:
-     - By translation: review each translated screenshot and confirm AI-extracted vocabulary and grammar.
-     - By word: review the day's candidate words grouped by word.
+   - 默认入口。
+   - 展示某一个选中日期，默认是今天。
+   - 支持切换到前一天、后一天或指定日期。
+   - 包含两个复习维度：
+     - 按翻译：逐条查看当天翻译截图，确认 AI 提取出的单词和语法。
+     - 按单词：把当天候选单词按词聚合后复习。
 
 2. **Words**
-   - Global word notebook.
-   - Shows accepted words across all days and translations.
-   - Supports search, familiarity filtering, and source-context review.
+   - 全局单词本。
+   - 展示所有日期、所有翻译中已经确认收录的单词。
+   - 支持搜索、熟悉度筛选和来源上下文查看。
 
 3. **History**
-   - Keeps the existing translation history behavior.
-   - Used for browsing all translation records and inspecting original/translated screenshots.
-   - Remains the source trace for vocabulary and grammar items.
+   - 保留现有翻译历史能力。
+   - 用于浏览全部翻译记录，查看原图和译图。
+   - 作为单词和语法的来源追溯入口。
 
-Dates in the Today workflow use the user's local learning timezone, currently Asia/Shanghai. API date parameters use `YYYY-MM-DD` and should be interpreted as local-day boundaries in that timezone, even though D1 stores timestamps in UTC.
+Today 工作流里的日期使用用户本地学习时区，目前按 `Asia/Shanghai` 处理。API 日期参数使用 `YYYY-MM-DD`，后端应按该时区的本地日期边界解释，即使 D1 内部存储的是 UTC 时间。
 
-## Today: By Translation
+## Today：按翻译
 
-This is the default workflow inside Today.
+这是 Today 内的默认工作流。
 
-Each translation card shows:
+每条翻译卡片展示：
 
-- Screenshot thumbnail.
-- Source text summary.
-- Translated text summary.
-- AI-extracted vocabulary candidates.
-- AI-extracted grammar candidates.
-- Review state for the translation.
+- 截图缩略图。
+- 原文摘要。
+- 译文摘要。
+- AI 提取的单词候选。
+- AI 提取的语法候选。
+- 当前翻译的处理状态。
 
-Each vocabulary candidate supports these actions:
+每个单词候选支持这些操作：
 
-- **Accept as unknown**: primary action. Adds or updates the word in the global notebook with `unknown` familiarity.
-- **Accept as learning**: adds or updates the word with `learning` familiarity.
-- **Mark mastered**: adds or updates the word with `mastered` familiarity.
-- **Reject**: marks this candidate as not useful and does not add it to the notebook.
-- **Edit**: allows correcting word, meaning, part of speech, and context before accepting.
+- **收录为陌生**：主操作。把单词添加或更新到全局单词本，熟悉度设为 `unknown`。
+- **收录为学习中**：把单词添加或更新到全局单词本，熟悉度设为 `learning`。
+- **标记为已掌握**：把单词添加或更新到全局单词本，熟悉度设为 `mastered`。
+- **不收录**：把当前候选标记为无学习价值，不加入单词本。
+- **编辑**：在收录前修正单词、释义、词性和上下文。
 
-Mastered words filtered during AI extraction are hidden by default under a collapsed "filtered mastered words" area. This keeps the review list clean while still making the filtering auditable.
+AI 提取阶段被过滤掉的已掌握词默认折叠在“已过滤的已掌握词”区域中。这样主审核列表保持干净，同时仍然可以审计 AI 到底过滤了哪些词。
 
-A translation is considered processed when all vocabulary and grammar candidates are no longer pending.
+当一条翻译下的所有单词和语法候选都不再是待处理状态时，这条翻译视为已处理。
 
-## Today: By Word
+## Today：按单词
 
-This view groups the selected day's vocabulary candidates by normalized word.
+这个视图把选中日期的单词候选按 `normalized_word` 聚合。
 
-It is used for fast review after or instead of reviewing each translation.
+它用于在逐条翻译审核之后快速复盘，也可以作为快速处理当天候选词的入口。
 
-Each grouped word shows:
+每个聚合单词展示：
 
-- Word.
-- Meaning.
-- Part of speech.
-- Number of occurrences that day.
-- Candidate statuses.
-- Available familiarity actions.
+- 单词。
+- 释义。
+- 词性。
+- 当天出现次数。
+- 候选状态。
+- 可用的熟悉度操作。
 
-Changing a grouped word's familiarity applies to all pending candidates for that normalized word on the selected day, unless a candidate has already been manually rejected.
+在该视图中修改某个聚合单词的熟悉度时，应作用于选中日期内该 `normalized_word` 下所有仍处于待处理状态的候选。已经人工拒绝的候选不应被批量操作覆盖。
 
 ## Words
 
-The global word notebook stores only confirmed learning items.
+全局单词本只存放已经确认的学习项。
 
-Each word entry shows:
+每个单词条目展示：
 
-- Word.
-- Normalized word.
-- Meaning.
-- Part of speech.
-- Familiarity: `unknown`, `learning`, or `mastered`.
-- First seen date.
-- Last seen date.
-- Occurrence count.
-- Source contexts linked back to translation records.
+- 单词。
+- 归一化单词。
+- 释义。
+- 词性。
+- 熟悉度：`unknown`、`learning` 或 `mastered`。
+- 首次出现日期。
+- 最近出现日期。
+- 出现次数。
+- 可追溯到翻译记录的来源上下文。
 
-Words supports:
+Words 支持：
 
-- Search by word or meaning.
-- Filter by familiarity.
-- Sort by last seen date, first seen date, or occurrence count.
-- Update familiarity directly.
+- 按单词或释义搜索。
+- 按熟悉度筛选。
+- 按最近出现日期、首次出现日期或出现次数排序。
+- 直接更新熟悉度。
 
-## Familiarity Model
+## 熟悉度模型
 
-Use three familiarity levels:
+使用三个熟悉度等级：
 
-- `unknown`: unfamiliar and should be reviewed often.
-- `learning`: partly known but still needs reinforcement.
-- `mastered`: known well enough to hide from daily AI candidate lists by default.
+- `unknown`：陌生，需要经常复习。
+- `learning`：有印象，但还需要加强。
+- `mastered`：已经掌握，默认从每日 AI 候选主列表中隐藏。
 
-AI extraction must use the local familiarity state:
+AI 提取必须使用本地熟悉度状态：
 
-- If a normalized extracted word matches a `mastered` word, create a filtered candidate and do not show it in the main pending list.
-- If it matches an `unknown` or `learning` word, create a pending candidate linked to the existing word.
-- If it does not match any word, create a pending candidate.
+- 如果归一化后的提取词匹配到 `mastered` 单词，则创建一个 `filtered` 候选，但不展示在主待处理列表中。
+- 如果匹配到 `unknown` 或 `learning` 单词，则创建一个 `pending` 候选，并关联已有单词。
+- 如果没有匹配到任何单词，则创建一个 `pending` 候选。
 
-## Data Model
+## 数据模型
 
-The current `vocabulary` table should no longer be treated as the global word notebook. The new model separates translation-level candidates from confirmed global words.
+当前 `vocabulary` 表不应继续作为真正的全局单词本使用。新的模型要把“翻译级候选词”和“已确认的全局单词”拆开。
 
 ### `translation_vocabulary`
 
-Stores AI-extracted or manually added vocabulary candidates for a single translation.
+存储某一条翻译下 AI 提取或人工添加的单词候选。
 
-Fields:
+字段：
 
 - `id`
 - `translation_id`
@@ -126,54 +126,54 @@ Fields:
 - `meaning`
 - `part_of_speech`
 - `context`
-- `status`: `pending`, `accepted`, `rejected`, or `filtered`
+- `status`：`pending`、`accepted`、`rejected` 或 `filtered`
 - `matched_word_id`
 - `created_at`
 - `updated_at`
 
-Constraints and indexes:
+约束和索引：
 
-- Unique candidate per `translation_id` and `normalized_word`.
-- Index by `translation_id`.
-- Index by `status`.
-- Index by `matched_word_id`.
+- 同一个 `translation_id` 和 `normalized_word` 下只保留一个候选。
+- 按 `translation_id` 建索引。
+- 按 `status` 建索引。
+- 按 `matched_word_id` 建索引。
 
-Status meaning:
+状态含义：
 
-- `pending`: waiting for user review.
-- `accepted`: confirmed and connected to a global word.
-- `rejected`: manually excluded from the notebook.
-- `filtered`: hidden because it matched a mastered global word.
+- `pending`：等待用户审核。
+- `accepted`：已确认，并已连接到全局单词。
+- `rejected`：人工排除，不进入单词本。
+- `filtered`：因为匹配到已掌握的全局单词而被隐藏。
 
 ### `words`
 
-Stores global word notebook entries. One normalized word should have one primary entry.
+存储全局单词本条目。一个 `normalized_word` 应只有一条主记录。
 
-Fields:
+字段：
 
 - `id`
 - `word`
 - `normalized_word`
 - `meaning`
 - `part_of_speech`
-- `familiarity`: `unknown`, `learning`, or `mastered`
+- `familiarity`：`unknown`、`learning` 或 `mastered`
 - `occurrence_count`
 - `first_seen_at`
 - `last_seen_at`
 - `created_at`
 - `updated_at`
 
-Constraints and indexes:
+约束和索引：
 
-- Unique `normalized_word`.
-- Index by `familiarity`.
-- Index by `last_seen_at`.
+- `normalized_word` 唯一。
+- 按 `familiarity` 建索引。
+- 按 `last_seen_at` 建索引。
 
 ### `word_occurrences`
 
-Connects global words to translation records and contexts.
+连接全局单词、翻译记录和上下文。
 
-Fields:
+字段：
 
 - `id`
 - `word_id`
@@ -182,71 +182,71 @@ Fields:
 - `context`
 - `created_at`
 
-Constraints and indexes:
+约束和索引：
 
-- Unique occurrence per `word_id` and `translation_vocab_id`.
-- Index by `word_id`.
-- Index by `translation_id`.
+- 同一个 `word_id` 和 `translation_vocab_id` 下只保留一条出现记录。
+- 按 `word_id` 建索引。
+- 按 `translation_id` 建索引。
 
 ### `grammar_notes`
 
-Keep grammar attached to translations in the first version.
+第一版继续让语法附属于翻译记录。
 
-Add:
+新增字段：
 
-- `status`: `pending`, `accepted`, or `rejected`
+- `status`：`pending`、`accepted` 或 `rejected`
 - `updated_at`
 
-Do not introduce a global grammar notebook in the first version. It can be added later if grammar review becomes important enough.
+第一版不引入全局语法库。如果后续发现语法复习的需求足够强，再抽象成全局 `grammar_patterns`。
 
-## AI Extraction Flow
+## AI 提取流程
 
-1. The shortcut sends a screenshot to the Worker.
-2. Worker translates the screenshot and saves the translation record.
-3. Worker sends a Queue message for AI extraction.
-4. AI returns vocabulary and grammar candidates.
-5. Worker normalizes extracted words and deduplicates repeated words within the same translation.
-6. Worker checks `words` by `normalized_word`.
-7. Worker writes candidates to `translation_vocabulary`:
-   - No match: `pending`.
-   - Match with `unknown` or `learning`: `pending` with `matched_word_id`.
-   - Match with `mastered`: `filtered` with `matched_word_id`.
-8. Worker writes grammar candidates to `grammar_notes` with `pending` status.
+1. 快捷指令把截图发送给 Worker。
+2. Worker 翻译截图，并保存翻译记录。
+3. Worker 发送 Queue 消息，触发 AI 提取。
+4. AI 返回单词候选和语法候选。
+5. Worker 对提取词做归一化，并去重同一条翻译内重复的单词。
+6. Worker 使用 `normalized_word` 查询 `words`。
+7. Worker 写入 `translation_vocabulary`：
+   - 没有匹配：写入 `pending`。
+   - 匹配到 `unknown` 或 `learning`：写入 `pending`，并设置 `matched_word_id`。
+   - 匹配到 `mastered`：写入 `filtered`，并设置 `matched_word_id`。
+8. Worker 把语法候选写入 `grammar_notes`，状态设为 `pending`。
 
-AI should not directly create global word notebook entries. The user confirms candidates first.
+AI 不应直接创建全局单词本条目。候选必须由用户确认后才进入全局单词本。
 
-## Review Flow
+## 审核流程
 
-When accepting a candidate:
+接受候选时：
 
-1. If `matched_word_id` exists, update that word's meaning, part of speech, familiarity, `last_seen_at`, and `occurrence_count`.
-2. If no matching word exists, create a new `words` row.
-3. Create a `word_occurrences` row.
-4. Mark the candidate as `accepted`.
+1. 如果存在 `matched_word_id`，更新该单词的释义、词性、熟悉度、`last_seen_at` 和 `occurrence_count`。
+2. 如果不存在匹配单词，创建新的 `words` 记录。
+3. 创建一条 `word_occurrences` 记录。
+4. 把候选标记为 `accepted`。
 
-When rejecting a candidate:
+拒绝候选时：
 
-1. Mark it as `rejected`.
-2. Do not create or update a global word.
+1. 把候选标记为 `rejected`。
+2. 不创建也不更新全局单词。
 
-When marking a candidate as mastered:
+标记候选为已掌握时：
 
-1. Create or update the global word as `mastered`.
-2. Create a `word_occurrences` row.
-3. Mark the candidate as `accepted`.
-4. Future AI extractions for the same normalized word should be filtered.
+1. 创建或更新全局单词，并把熟悉度设为 `mastered`。
+2. 创建一条 `word_occurrences` 记录。
+3. 把候选标记为 `accepted`。
+4. 后续 AI 再提取到同一个归一化单词时，应自动过滤。
 
-## API Surface
+## API 设计
 
-Add endpoints for daily review:
+新增每日复习接口：
 
 - `GET /api/days/:date/summary`
 - `GET /api/days/:date/translations`
 - `GET /api/days/:date/words`
 
-`:date` is a local date string in `YYYY-MM-DD` format. The backend converts it to UTC start/end timestamps for querying `translations.created_at`.
+`:date` 是 `YYYY-MM-DD` 格式的本地日期字符串。后端需要把它转换成 UTC 起止时间，再查询 `translations.created_at`。
 
-Add endpoints for candidate review:
+新增候选审核接口：
 
 - `PUT /api/translation-vocabulary/:id`
 - `POST /api/translation-vocabulary/:id/accept`
@@ -254,86 +254,86 @@ Add endpoints for candidate review:
 - `POST /api/grammar-notes/:id/accept`
 - `POST /api/grammar-notes/:id/reject`
 
-Add endpoints for global words:
+新增全局单词接口：
 
 - `GET /api/words`
 - `GET /api/words/:id`
 - `PUT /api/words/:id`
 
-Existing translation history endpoints should remain available.
+现有翻译历史接口继续保留。
 
-## UI Navigation
+## UI 导航
 
-Use restrained, content-first navigation consistent with the current product direction.
+使用克制、内容优先的导航方式，延续当前产品方向。
 
-Recommended top navigation:
+推荐顶部导航：
 
 - `Today`
 - `Words`
 - `History`
 
-Today date controls:
+Today 日期控制：
 
-- Previous day.
-- Current selected date.
-- Next day.
-- Optional date picker.
+- 前一天。
+- 当前选中日期。
+- 后一天。
+- 可选日期选择器。
 
-Today status controls:
+Today 状态控制：
 
-- Show pending only.
-- Show all.
-- Show filtered mastered words inside each translation when expanded.
+- 只看待处理。
+- 查看全部。
+- 在每条翻译内展开查看已过滤的已掌握词。
 
-## Migration
+## 数据迁移
 
-For existing data:
+针对已有数据：
 
-1. Create `translation_vocabulary`, `words`, and `word_occurrences`.
-2. Migrate existing `vocabulary` rows into `translation_vocabulary` with `accepted` status.
-3. For each migrated vocabulary row, create or update a global `words` entry with `unknown` familiarity.
-4. Create a `word_occurrences` row for each migrated vocabulary row.
-5. Add `status` and `updated_at` to `grammar_notes`; set existing rows to `accepted`.
+1. 创建 `translation_vocabulary`、`words` 和 `word_occurrences`。
+2. 把现有 `vocabulary` 行迁移到 `translation_vocabulary`，状态设为 `accepted`。
+3. 对每一条迁移后的词汇，创建或更新全局 `words` 条目，熟悉度设为 `unknown`。
+4. 为每条迁移后的词汇创建 `word_occurrences` 记录。
+5. 给 `grammar_notes` 增加 `status` 和 `updated_at`，并把已有行设为 `accepted`。
 
-The old `vocabulary` table can be kept temporarily during migration, but new reads and writes should use the new tables.
+旧的 `vocabulary` 表可以在迁移期间临时保留，但新的读写都应使用新表。
 
-## Testing
+## 测试
 
-Backend tests or manual API verification should cover:
+后端测试或手动 API 验证应覆盖：
 
-- AI extraction creates pending candidates for new words.
-- AI extraction filters mastered words.
-- Accepting a candidate creates or updates a global word.
-- Rejecting a candidate does not create a global word.
-- Today summary counts pending, accepted, rejected, and filtered items correctly.
-- Words list filters by familiarity.
+- AI 提取会为新词创建 `pending` 候选。
+- AI 提取会过滤已掌握单词。
+- 接受候选会创建或更新全局单词。
+- 拒绝候选不会创建全局单词。
+- Today summary 能正确统计 `pending`、`accepted`、`rejected` 和 `filtered` 项。
+- Words 列表能按熟悉度筛选。
 
-Frontend verification should cover:
+前端验证应覆盖：
 
-- Today defaults to the current day.
-- Date switching loads the selected day.
-- By translation review actions update the UI.
-- By word grouping reflects multiple occurrences.
-- Words search and familiarity filters work.
-- History still opens translation details.
+- Today 默认打开当前日期。
+- 切换日期能加载对应日期数据。
+- 按翻译审核操作能更新 UI。
+- 按单词聚合能反映多次出现。
+- Words 搜索和熟悉度筛选可用。
+- History 仍然可以打开翻译详情。
 
-Do not run `npm run build` as part of implementation verification. Build verification should be left to the user.
+实现验证时不要执行 `npm run build`。构建验证留给用户手动执行。
 
-## Initial Scope
+## 第一版范围
 
-Implement version B:
+实现方案 B：
 
-- Today daily review workflow.
-- Translation-level candidate review.
-- Day-level word grouping.
-- Global Words notebook.
-- Three-level familiarity model.
-- Local mastered-word filtering during AI extraction.
+- Today 每日复习工作流。
+- 翻译级候选审核。
+- 日期级单词聚合。
+- 全局 Words 单词本。
+- 三档熟悉度模型。
+- AI 提取时基于本地已掌握词过滤。
 
-Explicitly out of scope for the first version:
+第一版明确不做：
 
-- Spaced repetition scheduling.
-- Quiz mode.
-- Global grammar notebook.
-- Multi-user support.
-- Complex analytics or streaks.
+- 间隔重复调度。
+- 测验模式。
+- 全局语法库。
+- 多用户支持。
+- 复杂统计、连续打卡或游戏化功能。

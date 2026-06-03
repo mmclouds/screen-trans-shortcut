@@ -8,7 +8,6 @@ const Icons = {
   x: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
 };
 
-// ===== 配置 =====
 const API_BASE = '/api';
 let WORKER_API_KEY = '';
 
@@ -21,23 +20,35 @@ async function init() {
   }
 }
 
-// ===== Router =====
 function router() {
-  const hash = location.hash.slice(1) || '/';
   const app = document.getElementById('app');
+  const hash = location.hash.slice(1) || '/today';
+  setActiveNav(hash);
 
-  if (hash === '/') {
-    renderList(app);
+  if (hash === '/' || hash.startsWith('/today')) {
+    renderToday(app, getHashParam('date') || getShanghaiDate());
+  } else if (hash.startsWith('/words')) {
+    renderWords(app);
+  } else if (hash.startsWith('/history')) {
+    renderHistory(app);
   } else if (hash.startsWith('/translation/')) {
-    const id = hash.split('/translation/')[1];
+    const id = hash.split('/translation/')[1].split('?')[0];
     renderDetail(app, id);
+  } else {
+    location.hash = '#/today';
   }
 }
 
 window.addEventListener('hashchange', router);
 window.addEventListener('load', () => { init().then(router); });
 
-// ===== Toast =====
+function setActiveNav(hash) {
+  document.querySelectorAll('.top-nav a').forEach(a => a.classList.remove('active'));
+  const key = hash.startsWith('/words') ? 'words' : hash.startsWith('/history') || hash.startsWith('/translation') ? 'history' : 'today';
+  const link = document.querySelector(`.top-nav a[data-nav="${key}"]`);
+  if (link) link.classList.add('active');
+}
+
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -45,13 +56,10 @@ function showToast(msg) {
   setTimeout(() => el.classList.add('hidden'), 2500);
 }
 
-// ===== API 请求 =====
 async function api(path, opts = {}) {
   const url = API_BASE + path;
   const headers = { 'Content-Type': 'application/json', ...opts.headers };
-  if (WORKER_API_KEY) {
-    headers['Authorization'] = `Bearer ${WORKER_API_KEY}`;
-  }
+  if (WORKER_API_KEY) headers.Authorization = `Bearer ${WORKER_API_KEY}`;
   const res = await fetch(url, { ...opts, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
@@ -60,7 +68,6 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-// ===== Lightbox =====
 function openLightbox(src) {
   document.getElementById('lightbox-img').src = src;
   document.getElementById('lightbox').classList.remove('hidden');
@@ -69,7 +76,6 @@ document.getElementById('lightbox').addEventListener('click', function () {
   this.classList.add('hidden');
 });
 
-// ===== Modal =====
 function openModal(title, fields, onSubmit) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -81,8 +87,8 @@ function openModal(title, fields, onSubmit) {
           <div class="form-group">
             <label>${f.label}</label>
             ${f.type === 'textarea'
-              ? `<textarea class="input" name="${f.name}" required>${escHtmlAttr(f.value || '')}</textarea>`
-              : `<input class="input" type="${f.type || 'text'}" name="${f.name}" value="${escHtmlAttr(f.value || '')}" required>`}
+              ? `<textarea class="input" name="${f.name}" ${f.required === false ? '' : 'required'}>${escHtmlAttr(f.value || '')}</textarea>`
+              : `<input class="input" type="${f.type || 'text'}" name="${f.name}" value="${escHtmlAttr(f.value || '')}" ${f.required === false ? '' : 'required'}>`}
           </div>
         `).join('')}
         <div class="modal-actions">
@@ -93,40 +99,292 @@ function openModal(title, fields, onSubmit) {
     </div>
   `;
   document.body.appendChild(overlay);
-
   overlay.querySelector('.close-modal').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', function (e) {
-    if (e.target === overlay) overlay.remove();
-  });
-
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   overlay.querySelector('form').addEventListener('submit', async function (e) {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(this));
-    await onSubmit(data);
+    await onSubmit(Object.fromEntries(new FormData(this)));
     overlay.remove();
   });
 }
 
-// ===== 列表页 =====
-async function renderList(app) {
-  app.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>';
-
+async function renderToday(app, date) {
+  app.innerHTML = loading();
   try {
-    const page = parseInt(new URLSearchParams(location.search).get('page') || '1');
+    const [summary, translations, dayWords] = await Promise.all([
+      api(`/days/${date}/summary`),
+      api(`/days/${date}/translations`),
+      api(`/days/${date}/words`),
+    ]);
+
+    app.innerHTML = `
+      <section class="today-header">
+        <div>
+          <h1 class="page-title">Today</h1>
+          <div class="date-switcher">
+            <a class="btn btn-ghost btn-sm" href="#/today?date=${shiftDate(date, -1)}">Previous</a>
+            <input class="input date-input" type="date" value="${escAttr(date)}">
+            <a class="btn btn-ghost btn-sm" href="#/today?date=${shiftDate(date, 1)}">Next</a>
+          </div>
+        </div>
+        <div class="summary-grid">
+          <div><strong>${summary.translations}</strong><span>Translations</span></div>
+          <div><strong>${summary.vocabulary.pending}</strong><span>Pending words</span></div>
+          <div><strong>${summary.vocabulary.accepted}</strong><span>Accepted words</span></div>
+          <div><strong>${summary.vocabulary.filtered}</strong><span>Filtered</span></div>
+        </div>
+      </section>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="translations">By translation</button>
+        <button class="tab-btn" data-tab="words">By word</button>
+      </div>
+
+      <div class="tab-panel active" id="panel-translations">
+        ${translations.length ? translations.map(todayTranslationCard).join('') : empty('No translations for this day')}
+      </div>
+      <div class="tab-panel" id="panel-words">
+        ${dayWords.length ? `<div class="day-word-list">${dayWords.map(dayWordCard).join('')}</div>` : empty('No word candidates for this day')}
+      </div>
+    `;
+
+    app.querySelector('.date-input').addEventListener('change', function () {
+      location.hash = `#/today?date=${this.value}`;
+    });
+    bindTabs(app);
+    bindReviewActions(app, () => renderToday(app, date));
+  } catch (err) {
+    app.innerHTML = errorState(err);
+  }
+}
+
+function todayTranslationCard(t) {
+  const pending = [...t.candidates, ...t.grammar].filter(x => x.status === 'pending').length;
+  const filtered = t.candidates.filter(x => x.status === 'filtered');
+  const visibleCandidates = t.candidates.filter(x => x.status !== 'filtered');
+  return `
+    <article class="review-card">
+      <div class="review-main">
+        <a href="#/translation/${t.id}" class="review-thumb">
+          <img src="${escAttr(t.translated_image_url)}" alt="Translated screenshot" loading="lazy">
+        </a>
+        <div class="review-copy">
+          <div class="review-meta">${formatDate(t.created_at)} · ${pending ? `${pending} pending` : 'Processed'}</div>
+          <p>${escHtml(t.source_text || '(no text detected)')}</p>
+          <small>${escHtml(t.translated_text || '')}</small>
+        </div>
+      </div>
+
+      <div class="review-section">
+        <h3>Vocabulary</h3>
+        ${visibleCandidates.length ? visibleCandidates.map(candidateCard).join('') : '<p class="muted">No visible word candidates.</p>'}
+        ${filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${filtered.length})</summary>${filtered.map(candidateCard).join('')}</details>` : ''}
+      </div>
+
+      <div class="review-section">
+        <h3>Grammar</h3>
+        ${t.grammar.length ? t.grammar.map(grammarReviewCard).join('') : '<p class="muted">No grammar candidates.</p>'}
+      </div>
+    </article>
+  `;
+}
+
+function candidateCard(v) {
+  return `
+    <div class="candidate-card status-${escAttr(v.status)}">
+      <div>
+        <strong>${escHtml(v.word)}</strong>
+        <span class="pill">${escHtml(v.status)}</span>
+        ${v.part_of_speech ? `<span class="muted">${escHtml(v.part_of_speech)}</span>` : ''}
+        <p>${escHtml(v.meaning)}</p>
+        ${v.context ? `<small>${escHtml(v.context)}</small>` : ''}
+      </div>
+      <div class="candidate-actions">
+        ${v.status === 'pending' || v.status === 'filtered' ? `
+          <button class="btn btn-primary btn-sm accept-candidate" data-id="${v.id}" data-familiarity="unknown">Unknown</button>
+          <button class="btn btn-ghost btn-sm accept-candidate" data-id="${v.id}" data-familiarity="learning">Learning</button>
+          <button class="btn btn-ghost btn-sm accept-candidate" data-id="${v.id}" data-familiarity="mastered">Mastered</button>
+          <button class="btn btn-ghost btn-sm edit-candidate" data-id="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
+          <button class="btn btn-danger btn-sm reject-candidate" data-id="${v.id}">Reject</button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function grammarReviewCard(g) {
+  return `
+    <div class="candidate-card status-${escAttr(g.status || 'accepted')}">
+      <div>
+        <strong>${escHtml(g.pattern)}</strong>
+        <span class="pill">${escHtml(g.status || 'accepted')}</span>
+        <p>${escHtml(g.explanation)}</p>
+        ${g.example ? `<small>${escHtml(g.example)}</small>` : ''}
+      </div>
+      ${g.status === 'pending' ? `
+        <div class="candidate-actions">
+          <button class="btn btn-primary btn-sm accept-grammar" data-id="${g.id}">Accept</button>
+          <button class="btn btn-danger btn-sm reject-grammar" data-id="${g.id}">Reject</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function dayWordCard(w) {
+  return `
+    <div class="item-card">
+      <div class="item-title">${escHtml(w.word)} <span class="pill">${escHtml(w.status)}</span></div>
+      <div class="item-subtitle">${escHtml(w.meaning)}</div>
+      <div class="item-meta">${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrence${w.occurrence_count > 1 ? 's' : ''}</div>
+    </div>
+  `;
+}
+
+function bindReviewActions(root, refresh) {
+  root.querySelectorAll('.accept-candidate').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      await api(`/translation-vocabulary/${this.dataset.id}/accept`, {
+        method: 'POST',
+        body: JSON.stringify({ familiarity: this.dataset.familiarity }),
+      });
+      showToast('Word accepted');
+      refresh();
+    });
+  });
+  root.querySelectorAll('.reject-candidate').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      await api(`/translation-vocabulary/${this.dataset.id}/reject`, { method: 'POST' });
+      showToast('Word rejected');
+      refresh();
+    });
+  });
+  root.querySelectorAll('.edit-candidate').forEach(btn => {
+    btn.addEventListener('click', function () {
+      editCandidate(this.dataset, refresh);
+    });
+  });
+  root.querySelectorAll('.accept-grammar').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      await api(`/grammar-notes/${this.dataset.id}/accept`, { method: 'POST' });
+      showToast('Grammar accepted');
+      refresh();
+    });
+  });
+  root.querySelectorAll('.reject-grammar').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      await api(`/grammar-notes/${this.dataset.id}/reject`, { method: 'POST' });
+      showToast('Grammar rejected');
+      refresh();
+    });
+  });
+}
+
+function editCandidate(data, refresh) {
+  openModal('Edit Word Candidate', [
+    { name: 'word', label: 'Word', value: data.word },
+    { name: 'meaning', label: 'Meaning', value: data.meaning },
+    { name: 'part_of_speech', label: 'Part of speech', value: data.pos, required: false },
+    { name: 'context', label: 'Context', value: data.context, required: false },
+  ], async (formData) => {
+    await api(`/translation-vocabulary/${data.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(formData),
+    });
+    showToast('Candidate updated');
+    refresh();
+  });
+}
+
+async function renderWords(app) {
+  app.innerHTML = loading();
+  try {
+    const params = getHashParams();
+    const q = params.get('q') || '';
+    const familiarity = params.get('familiarity') || '';
+    const sort = params.get('sort') || 'last_seen';
+    const query = new URLSearchParams();
+    if (q) query.set('q', q);
+    if (familiarity) query.set('familiarity', familiarity);
+    if (sort) query.set('sort', sort);
+    const words = await api(`/words?${query.toString()}`);
+
+    app.innerHTML = `
+      <h1 class="page-title">Words</h1>
+      <form class="filters words-filters">
+        <input class="input" name="q" placeholder="Search word or meaning" value="${escHtmlAttr(q)}">
+        <select class="input" name="familiarity">
+          <option value="">All</option>
+          <option value="unknown" ${familiarity === 'unknown' ? 'selected' : ''}>Unknown</option>
+          <option value="learning" ${familiarity === 'learning' ? 'selected' : ''}>Learning</option>
+          <option value="mastered" ${familiarity === 'mastered' ? 'selected' : ''}>Mastered</option>
+        </select>
+        <select class="input" name="sort">
+          <option value="last_seen" ${sort === 'last_seen' ? 'selected' : ''}>Last seen</option>
+          <option value="first_seen" ${sort === 'first_seen' ? 'selected' : ''}>First seen</option>
+          <option value="occurrence" ${sort === 'occurrence' ? 'selected' : ''}>Occurrences</option>
+        </select>
+        <button class="btn btn-primary" type="submit">Apply</button>
+      </form>
+      <div class="word-list">
+        ${words.length ? words.map(wordCard).join('') : empty('No words yet')}
+      </div>
+    `;
+
+    app.querySelector('.words-filters').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const data = new FormData(this);
+      const next = new URLSearchParams();
+      for (const [key, value] of data.entries()) {
+        if (value) next.set(key, value);
+      }
+      location.hash = `#/words?${next.toString()}`;
+    });
+
+    app.querySelectorAll('.word-familiarity').forEach(select => {
+      select.addEventListener('change', async function () {
+        await api(`/words/${this.dataset.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ familiarity: this.value }),
+        });
+        showToast('Word updated');
+      });
+    });
+  } catch (err) {
+    app.innerHTML = errorState(err);
+  }
+}
+
+function wordCard(w) {
+  return `
+    <article class="item-card word-card">
+      <div>
+        <div class="item-title">${escHtml(w.word)}</div>
+        <div class="item-subtitle">${escHtml(w.meaning)}</div>
+        <div class="item-meta">${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrences · last seen ${formatDate(w.last_seen_at)}</div>
+      </div>
+      <select class="input word-familiarity" data-id="${w.id}">
+        <option value="unknown" ${w.familiarity === 'unknown' ? 'selected' : ''}>Unknown</option>
+        <option value="learning" ${w.familiarity === 'learning' ? 'selected' : ''}>Learning</option>
+        <option value="mastered" ${w.familiarity === 'mastered' ? 'selected' : ''}>Mastered</option>
+      </select>
+    </article>
+  `;
+}
+
+async function renderHistory(app) {
+  app.innerHTML = loading();
+  try {
+    const page = parseInt(getHashParam('page') || '1', 10);
     const result = await api(`/translations?page=${page}&limit=20`);
 
     if (!result.data.length) {
-      app.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-icon">${Icons.book}</span>
-          <p>No translations yet</p>
-          <small>Send a translation from your device to get started.</small>
-        </div>`;
+      app.innerHTML = empty('No translations yet', 'Send a translation from your device to get started.');
       return;
     }
 
     app.innerHTML = `
-      <h1 class="page-title">Translation History</h1>
+      <h1 class="page-title">History</h1>
       <div class="translation-list">
         ${result.data.map(t => `
           <a href="#/translation/${t.id}" class="translation-card">
@@ -144,7 +402,7 @@ async function renderList(app) {
       ${renderPagination(result.pagination)}
     `;
   } catch (err) {
-    app.innerHTML = `<div class="empty-state"><p>Error: ${escHtml(err.message)}</p></div>`;
+    app.innerHTML = errorState(err);
   }
 }
 
@@ -152,19 +410,23 @@ function renderPagination(p) {
   if (p.totalPages <= 1) return '';
   const items = [];
   for (let i = 1; i <= p.totalPages; i++) {
-    items.push(`<li><a href="#/?page=${i}" class="${i === p.page ? 'primary' : ''}">${i}</a></li>`);
+    items.push(`<li><a href="#/history?page=${i}" class="${i === p.page ? 'primary' : ''}">${i}</a></li>`);
   }
   return `<nav class="pagination"><ul>${items.join('')}</ul></nav>`;
 }
 
-// ===== 详情页 =====
 async function renderDetail(app, id) {
-  app.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>';
-
+  app.innerHTML = loading();
   try {
     const t = await api(`/translations/${id}`);
+    const candidates = t.candidates && t.candidates.length ? t.candidates : (t.vocabulary || []).map(v => ({
+      ...v,
+      status: 'accepted',
+      normalized_word: v.word,
+    }));
+
     app.innerHTML = `
-      <a href="#/" class="back-link">${Icons.arrowLeft} Back</a>
+      <a href="#/history" class="back-link">${Icons.arrowLeft} Back</a>
 
       <div class="compare-grid">
         <figure>
@@ -190,217 +452,101 @@ async function renderDetail(app, id) {
         </div>
       ` : ''}
 
-      <div class="detail-meta">
-        Translated at ${formatDate(t.created_at)}
-      </div>
+      <div class="detail-meta">Translated at ${formatDate(t.created_at)}</div>
 
-      <!-- Tabs -->
       <div class="tabs">
-        <button class="tab-btn active" data-tab="vocab">Vocabulary (${t.vocabulary.length})</button>
+        <button class="tab-btn active" data-tab="vocab">Vocabulary (${candidates.length})</button>
         <button class="tab-btn" data-tab="grammar">Grammar (${t.grammar.length})</button>
       </div>
 
-      <!-- Vocabulary Panel -->
       <div class="tab-panel active" id="panel-vocab">
-        <div class="toolbar">
-          <span></span>
-          <button class="btn btn-primary btn-sm add-vocab-btn">
-            ${Icons.plus} Add Word
-          </button>
-        </div>
-        <table class="data-table vocab-table">
-          <thead><tr><th>Word</th><th>Meaning</th><th>POS</th><th>Context</th><th></th></tr></thead>
-          <tbody>${t.vocabulary.map(v => vocabRow(t.id, v)).join('')}</tbody>
-        </table>
-        <div class="vocab-cards">${t.vocabulary.map(v => vocabCard(t.id, v)).join('')}</div>
+        ${candidates.length ? candidates.map(candidateCard).join('') : empty('No vocabulary')}
       </div>
-
-      <!-- Grammar Panel -->
       <div class="tab-panel" id="panel-grammar">
-        <div class="toolbar">
-          <span></span>
-          <button class="btn btn-primary btn-sm add-grammar-btn">
-            ${Icons.plus} Add Grammar
-          </button>
-        </div>
-        ${t.grammar.map(g => grammarCard(t.id, g)).join('')}
+        ${t.grammar.length ? t.grammar.map(grammarReviewCard).join('') : empty('No grammar')}
       </div>
     `;
 
-    // Tab 切换
-    app.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', function () {
-        app.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        app.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        this.classList.add('active');
-        document.getElementById(`panel-${this.dataset.tab}`).classList.add('active');
-      });
-    });
-
-    // 添加按钮
-    const addVocabBtn = app.querySelector('.add-vocab-btn');
-    if (addVocabBtn) {
-      addVocabBtn.addEventListener('click', () => addVocab(id));
-    }
-    const addGrammarBtn = app.querySelector('.add-grammar-btn');
-    if (addGrammarBtn) {
-      addGrammarBtn.addEventListener('click', () => addGrammar(id));
-    }
-
-    // 删除 & 编辑按钮
-    app.querySelectorAll('.del-vocab').forEach(btn => {
-      btn.addEventListener('click', async function () {
-        if (!confirm('Delete this word?')) return;
-        await api(`/translations/${id}/vocabulary/${this.dataset.vid}`, { method: 'DELETE' });
-        showToast('Deleted');
-        renderDetail(app, id);
-      });
-    });
-    app.querySelectorAll('.edit-vocab').forEach(btn => {
-      btn.addEventListener('click', async function () {
-        await editVocab(id, this.dataset);
-        renderDetail(app, id);
-      });
-    });
-    app.querySelectorAll('.del-grammar').forEach(btn => {
-      btn.addEventListener('click', async function () {
-        if (!confirm('Delete this grammar note?')) return;
-        await api(`/translations/${id}/grammar/${this.dataset.gid}`, { method: 'DELETE' });
-        showToast('Deleted');
-        renderDetail(app, id);
-      });
-    });
-    app.querySelectorAll('.edit-grammar').forEach(btn => {
-      btn.addEventListener('click', async function () {
-        await editGrammar(id, this.dataset);
-        renderDetail(app, id);
-      });
-    });
+    bindTabs(app);
+    bindReviewActions(app, () => renderDetail(app, id));
   } catch (err) {
-    app.innerHTML = `<div class="empty-state"><p>Error: ${escHtml(err.message)}</p></div>`;
+    app.innerHTML = errorState(err);
   }
 }
 
-// ===== 词汇/语法 增删改 =====
-function addVocab(translationId) {
-  openModal('Add Word', [
-    { name: 'word', label: 'Word' },
-    { name: 'meaning', label: 'Meaning' },
-    { name: 'part_of_speech', label: 'Part of speech' },
-    { name: 'context', label: 'Context' },
-  ], async (data) => {
-    await api(`/translations/${translationId}/vocabulary`, {
-      method: 'POST',
-      body: JSON.stringify(data),
+function bindTabs(root) {
+  root.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      root.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      root.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById(`panel-${this.dataset.tab}`).classList.add('active');
     });
-    showToast('Word added');
-    location.reload();
   });
 }
 
-function editVocab(translationId, data) {
-  openModal('Edit Word', [
-    { name: 'word', label: 'Word', value: data.word },
-    { name: 'meaning', label: 'Meaning', value: data.meaning },
-    { name: 'part_of_speech', label: 'Part of speech', value: data.pos },
-    { name: 'context', label: 'Context', value: data.context },
-  ], async (formData) => {
-    await api(`/translations/${translationId}/vocabulary/${data.vid}`, {
-      method: 'PUT',
-      body: JSON.stringify(formData),
-    });
-    showToast('Word updated');
-  });
+function loading() {
+  return '<div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>';
 }
 
-function addGrammar(translationId) {
-  openModal('Add Grammar', [
-    { name: 'pattern', label: 'Pattern' },
-    { name: 'explanation', label: 'Explanation', type: 'textarea' },
-    { name: 'example', label: 'Example' },
-  ], async (data) => {
-    await api(`/translations/${translationId}/grammar`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    showToast('Grammar added');
-    location.reload();
-  });
-}
-
-function editGrammar(translationId, data) {
-  openModal('Edit Grammar', [
-    { name: 'pattern', label: 'Pattern', value: data.pattern },
-    { name: 'explanation', label: 'Explanation', type: 'textarea', value: data.explanation },
-    { name: 'example', label: 'Example', value: data.example },
-  ], async (formData) => {
-    await api(`/translations/${translationId}/grammar/${data.gid}`, {
-      method: 'PUT',
-      body: JSON.stringify(formData),
-    });
-    showToast('Grammar updated');
-  });
-}
-
-// ===== 词汇/语法 渲染 =====
-function vocabRow(tid, v) {
-  return `<tr>
-    <td><strong>${escHtml(v.word)}</strong></td>
-    <td>${escHtml(v.meaning)}</td>
-    <td>${escHtml(v.part_of_speech || '-')}</td>
-    <td>${escHtml(v.context || '-')}</td>
-    <td>
-      <div class="actions">
-        <button class="btn btn-ghost btn-sm edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
-        <button class="btn btn-danger btn-sm del-vocab" data-vid="${v.id}">${Icons.trash}</button>
-      </div>
-    </td>
-  </tr>`;
-}
-
-function vocabCard(tid, v) {
+function empty(title, subtitle = '') {
   return `
-    <div class="item-card vocab-card">
-      <div class="item-title">${escHtml(v.word)} <small style="font-weight:400;color:var(--ink-muted);">${escHtml(v.part_of_speech || '')}</small></div>
-      <div class="item-subtitle">${escHtml(v.meaning)}</div>
-      ${v.context ? `<div class="item-meta">Context: ${escHtml(v.context)}</div>` : ''}
-      <div class="item-actions">
-        <button class="btn btn-ghost btn-sm edit-vocab" data-vid="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
-        <button class="btn btn-danger btn-sm del-vocab" data-vid="${v.id}">${Icons.trash}</button>
-      </div>
+    <div class="empty-state">
+      <span class="empty-icon">${Icons.book}</span>
+      <p>${escHtml(title)}</p>
+      ${subtitle ? `<small>${escHtml(subtitle)}</small>` : ''}
     </div>`;
 }
 
-function grammarCard(tid, g) {
-  return `
-    <div class="item-card grammar-card" style="margin-bottom:var(--space-sm);">
-      <div class="item-title">${escHtml(g.pattern)}</div>
-      <div class="item-meta" style="margin:var(--space-xs) 0;">${escHtml(g.explanation)}</div>
-      ${g.example ? `<div class="item-meta" style="font-style:italic;">Example: ${escHtml(g.example)}</div>` : ''}
-      <div class="item-actions">
-        <button class="btn btn-ghost btn-sm edit-grammar" data-gid="${g.id}" data-pattern="${escAttr(g.pattern)}" data-explanation="${escAttr(g.explanation)}" data-example="${escAttr(g.example || '')}">${Icons.edit}</button>
-        <button class="btn btn-danger btn-sm del-grammar" data-gid="${g.id}">${Icons.trash}</button>
-      </div>
-    </div>`;
+function errorState(err) {
+  return `<div class="empty-state"><p>Error: ${escHtml(err.message)}</p></div>`;
 }
 
-// ===== 工具函数 =====
+function getHashParams() {
+  const query = (location.hash.split('?')[1] || '');
+  return new URLSearchParams(query);
+}
+
+function getHashParam(name) {
+  return getHashParams().get(name);
+}
+
+function getShanghaiDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function shiftDate(date, days) {
+  const d = new Date(`${date}T00:00:00+08:00`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 function escHtml(s) {
   const d = document.createElement('div');
-  d.textContent = s;
+  d.textContent = String(s ?? '');
   return d.innerHTML;
 }
 
 function escHtmlAttr(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escAttr(s) {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function formatDate(s) {
   if (!s) return '-';
-  const d = new Date(s.replace(' ', 'T') + 'Z');
+  const d = new Date(String(s).replace(' ', 'T') + 'Z');
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }

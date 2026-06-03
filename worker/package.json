@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
@@ -13,6 +15,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250528.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
     "wrangler": "^4.97.0"
   }
 }
