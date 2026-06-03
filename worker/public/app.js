@@ -118,20 +118,17 @@ async function renderToday(app, date) {
     ]);
 
     app.innerHTML = `
-      <section class="today-header">
-        <div>
-          <h1 class="page-title">Today</h1>
-          <div class="date-switcher">
-            <a class="btn btn-ghost btn-sm" href="#/today?date=${shiftDate(date, -1)}">Previous</a>
-            <input class="input date-input" type="date" value="${escAttr(date)}">
-            <a class="btn btn-ghost btn-sm" href="#/today?date=${shiftDate(date, 1)}">Next</a>
-          </div>
+      <section class="today-toolbar" aria-label="Daily review controls">
+        <div class="date-switcher">
+          <a class="btn btn-ghost btn-sm date-step" href="#/today?date=${shiftDate(date, -1)}" aria-label="Previous day">&lt;</a>
+          <input class="input date-input" type="date" value="${escAttr(date)}" aria-label="Selected date">
+          <a class="btn btn-ghost btn-sm date-step" href="#/today?date=${shiftDate(date, 1)}" aria-label="Next day">&gt;</a>
         </div>
-        <div class="summary-grid">
-          <div><strong>${summary.translations}</strong><span>Translations</span></div>
-          <div><strong>${summary.vocabulary.pending}</strong><span>Pending words</span></div>
-          <div><strong>${summary.vocabulary.accepted}</strong><span>Accepted words</span></div>
-          <div><strong>${summary.vocabulary.filtered}</strong><span>Filtered</span></div>
+        <div class="compact-summary" aria-label="Daily summary">
+          <span><strong>${summary.translations}</strong> 翻译</span>
+          <span><strong>${summary.vocabulary.pending}</strong> 待处理</span>
+          <span><strong>${summary.vocabulary.accepted}</strong> 已收录</span>
+          <span><strong>${summary.vocabulary.filtered}</strong> 已过滤</span>
         </div>
       </section>
 
