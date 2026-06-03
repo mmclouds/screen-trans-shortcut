@@ -123,7 +123,7 @@ async function handleTranslate(c: any) {
 
 // ========== 翻译记录 ==========
 
-// POST /api/translations — Express 一次性写入翻译 + 词汇 + 语法
+// POST /api/translations — 手动或外部客户端写入翻译 + 词汇 + 语法
 const createSchema = z.object({
   id: z.string().uuid(),
   original_image_url: z.string().url(),

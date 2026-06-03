@@ -43,7 +43,7 @@ screen-trans-shortcut/
 
 ## Worker 本地调试
 
-当前项目只需要调试 `worker/` 目录。`server/` 是旧版 Express 实现，不再作为推荐运行路径。
+当前项目只保留 `worker/` 目录，翻译 API、图片压缩、R2 持久化、D1 写入、AI 队列提取和回顾页面都在 Worker 侧完成。
 
 ### 本地 D1 和远程 D1 是什么关系
 
