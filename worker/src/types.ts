@@ -32,6 +32,7 @@ export interface VocabInput {
   translation_id: string;
   word: string;
   meaning: string;
+  phonetic?: string;
   part_of_speech: string;
   context: string;
 }
@@ -70,6 +71,7 @@ export interface TranslationVocabulary {
   word: string;
   normalized_word: string;
   meaning: string;
+  phonetic: string;
   part_of_speech: string;
   context: string;
   status: VocabularyStatus;
@@ -83,6 +85,7 @@ export interface Word {
   word: string;
   normalized_word: string;
   meaning: string;
+  phonetic: string;
   part_of_speech: string;
   familiarity: Familiarity;
   occurrence_count: number;
@@ -146,11 +149,22 @@ export interface DayWord {
   normalized_word: string;
   word: string;
   meaning: string;
+  phonetic: string;
   part_of_speech: string;
   status: VocabularyStatus;
   matched_word_id: number | null;
   candidate_ids: string;
   occurrence_count: number;
+  occurrences: DayWordOccurrence[];
+}
+
+export interface DayWordOccurrence {
+  candidate_id: number;
+  context: string;
+  source_text: string;
+  translated_text: string;
+  original_image_url: string;
+  translated_image_url: string;
 }
 
 export interface PaginatedResponse<T> {

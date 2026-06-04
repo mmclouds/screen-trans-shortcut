@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import * as db from './db';
+import { buildAiExtractionPrompt } from './ai-prompt';
+import { fetchPhonetic, fetchPronunciation } from './phonetic';
 import type { AiExtractionMessage, CreateTranslationBody, Familiarity, TextBlock } from './types';
 
 type Env = {
@@ -222,6 +224,12 @@ app.get('/api/days/:date/words', async (c) => {
   }
 });
 
+app.get('/api/phonetic', async (c) => {
+  const word = c.req.query('word') || '';
+  if (!word.trim()) return c.json({ word, phonetic: '', audio: '' });
+  return c.json({ word, ...(await fetchPronunciation(word)) });
+});
+
 // ========== 候选审核 ==========
 
 const familiaritySchema = z.enum(['unknown', 'learning', 'mastered']);
@@ -229,6 +237,7 @@ const familiaritySchema = z.enum(['unknown', 'learning', 'mastered']);
 const updateCandidateSchema = z.object({
   word: z.string().min(1).optional(),
   meaning: z.string().min(1).optional(),
+  phonetic: z.string().optional(),
   part_of_speech: z.string().optional(),
   context: z.string().optional(),
 });
@@ -279,8 +288,13 @@ app.post('/api/grammar-notes/:id/reject', auth, async (c) => {
 const updateWordSchema = z.object({
   word: z.string().min(1).optional(),
   meaning: z.string().min(1).optional(),
+  phonetic: z.string().optional(),
   part_of_speech: z.string().optional(),
   familiarity: familiaritySchema.optional(),
+});
+
+const bulkDeleteWordsSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
 });
 
 app.get('/api/words', async (c) => {
@@ -290,6 +304,12 @@ app.get('/api/words', async (c) => {
     familiarity: familiarity && ['unknown', 'learning', 'mastered'].includes(familiarity) ? familiarity : undefined,
     sort: c.req.query('sort') || undefined,
   }));
+});
+
+app.post('/api/words/bulk-delete', auth, zValidator('json', bulkDeleteWordsSchema), async (c) => {
+  const body = await c.req.json<{ ids: number[] }>();
+  const deleted = await db.deleteWords(c.env.DB, body.ids);
+  return c.json({ success: true, deleted });
 });
 
 app.get('/api/words/:id', async (c) => {
@@ -303,6 +323,13 @@ app.put('/api/words/:id', auth, zValidator('json', updateWordSchema), async (c) 
   const id = parseInt(c.req.param('id'), 10);
   const body = await c.req.json();
   const ok = await db.updateWord(c.env.DB, id, body);
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+app.delete('/api/words/:id', auth, async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const ok = await db.deleteWord(c.env.DB, id);
   if (!ok) return c.json({ error: 'Not found' }, 404);
   return c.json({ success: true });
 });
@@ -424,32 +451,7 @@ async function translateImage(env: Env, imageBase64: string): Promise<{ Image?: 
 }
 
 async function extractAI(env: Env, message: AiExtractionMessage) {
-  const prompt = `You are a language tutor. Analyze the following translation from ${message.source_language} to ${message.target_language}.
-
-Source (${message.source_language}):
-${message.source_text}
-
-Translation (${message.target_language}):
-${message.translated_text}
-
-Extract vocabulary and grammar worth learning. Return ONLY valid JSON:
-{
-  "vocabulary": [
-    { "word": "...", "meaning": "...", "part_of_speech": "...", "context": "..." }
-  ],
-  "grammar": [
-    { "pattern": "...", "explanation": "...", "example": "..." }
-  ]
-}
-
-Rules:
-- vocabulary: return 3-10 items when the source text contains learnable words or phrases
-- grammar: return 1-5 items when the source text contains useful sentence patterns
-- Prefer words, phrases, collocations, idioms, and practical expressions from the source text
-- Explain meanings in ${message.target_language}
-- part_of_speech: noun/verb/adjective/adverb/phrase/etc.
-- Only return empty arrays when the source text is empty, unreadable, or entirely trivial
-- Do not include markdown fences or commentary`;
+  const prompt = buildAiExtractionPrompt(message);
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -474,11 +476,13 @@ Rules:
   if (!content) throw new Error('AI 返回空内容');
 
   const parsed = JSON.parse(content);
-  const vocabulary = normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words).slice(0, 10);
+  const vocabulary = await withPhonetics(normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words).slice(0, 10));
   const grammar = normalizeAiArray(parsed.grammar || parsed.grammar_notes || parsed.patterns).slice(0, 5);
+  const formattedTranslatedText = normalizeAiText(parsed.formatted_translated_text);
   console.log('AI 返回解析完成:', message.translation_id, vocabulary.length, grammar.length);
 
   return {
+    formattedTranslatedText,
     vocabulary,
     grammar,
   };
@@ -486,6 +490,28 @@ Rules:
 
 function normalizeAiArray(value: unknown): any[] {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
+}
+
+async function withPhonetics(items: any[]): Promise<any[]> {
+  const cache = new Map<string, string>();
+  return Promise.all(items.map(async (item) => {
+    const word = typeof item.word === 'string' ? item.word : '';
+    if (!word) return item;
+    if (!cache.has(word)) {
+      cache.set(word, await fetchPhonetic(word));
+    }
+    return { ...item, phonetic: cache.get(word) || '' };
+  }));
+}
+
+function normalizeAiText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || undefined;
 }
 
 type VolcSignInput = {
@@ -617,6 +643,9 @@ export default {
           return;
         }
         const result = await extractAI(env, message.body);
+        await db.updateTranslationFormattedText(env.DB, message.body.translation_id, {
+          translated_text: result.formattedTranslatedText,
+        });
         await db.saveAiExtractionCandidates(env.DB, message.body.translation_id, result.vocabulary, result.grammar);
         console.log('AI 队列消息完成:', message.body.translation_id, result.vocabulary.length, result.grammar.length);
         message.ack();

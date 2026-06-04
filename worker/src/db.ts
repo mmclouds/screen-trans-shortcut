@@ -18,7 +18,7 @@ import type {
   WordDetail,
   WordOccurrence,
 } from './types';
-import { classifyVocabularyCandidate, getShanghaiDayRange, normalizeWord } from './review';
+import { classifyVocabularyCandidate, getShanghaiDayRange, groupDayWords, normalizeWord } from './review';
 
 // ---------- 翻译记录 ----------
 
@@ -117,9 +117,43 @@ export async function deleteTranslation(
   db: D1Database,
   id: string
 ): Promise<boolean> {
-  const { success } = await db
-    .prepare('DELETE FROM translations WHERE id = ?')
+  const existing = await db
+    .prepare('SELECT id FROM translations WHERE id = ?')
     .bind(id)
+    .first<{ id: string }>();
+  if (!existing) return false;
+
+  await db.batch([
+    db.prepare('DELETE FROM word_occurrences WHERE translation_id = ?').bind(id),
+    db.prepare('DELETE FROM translation_vocabulary WHERE translation_id = ?').bind(id),
+    db.prepare('DELETE FROM vocabulary WHERE translation_id = ?').bind(id),
+    db.prepare('DELETE FROM grammar_notes WHERE translation_id = ?').bind(id),
+    db.prepare('DELETE FROM translations WHERE id = ?').bind(id),
+  ]);
+  return true;
+}
+
+export async function updateTranslationFormattedText(
+  db: D1Database,
+  id: string,
+  input: { source_text?: string; translated_text?: string }
+): Promise<boolean> {
+  const fields: string[] = [];
+  const values: string[] = [];
+
+  if (input.source_text !== undefined) {
+    fields.push('source_text = ?');
+    values.push(input.source_text);
+  }
+  if (input.translated_text !== undefined) {
+    fields.push('translated_text = ?');
+    values.push(input.translated_text);
+  }
+  if (!fields.length) return false;
+
+  const { success } = await db
+    .prepare(`UPDATE translations SET ${fields.join(', ')} WHERE id = ?`)
+    .bind(...values, id)
     .run();
   return success;
 }
@@ -186,13 +220,14 @@ export async function saveAiExtractionCandidates(
 
     stmts.push(
       db.prepare(`INSERT OR IGNORE INTO translation_vocabulary
-        (translation_id, word, normalized_word, meaning, part_of_speech, context, status, matched_word_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        (translation_id, word, normalized_word, meaning, phonetic, part_of_speech, context, status, matched_word_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(
           translationId,
           v.word,
           normalized,
           v.meaning,
+          v.phonetic || '',
           v.part_of_speech || '',
           v.context || '',
           status,
@@ -278,44 +313,32 @@ export async function getDaySummary(db: D1Database, date: string): Promise<DaySu
 export async function listDayWords(db: D1Database, date: string): Promise<DayWord[]> {
   const { startUtc, endUtc } = getShanghaiDayRange(date);
   const { results } = await db
-    .prepare(`SELECT tv.*
+    .prepare(`SELECT
+        tv.*,
+        t.source_text,
+        t.translated_text,
+        t.original_image_url,
+        t.translated_image_url
       FROM translation_vocabulary tv
       JOIN translations t ON t.id = tv.translation_id
       WHERE t.created_at >= ? AND t.created_at < ?
+        AND tv.status <> 'rejected'
       ORDER BY tv.created_at DESC`)
     .bind(startUtc, endUtc)
-    .all<TranslationVocabulary>();
+    .all<TranslationVocabulary & {
+      source_text: string;
+      translated_text: string;
+      original_image_url: string;
+      translated_image_url: string;
+    }>();
 
-  const grouped = new Map<string, DayWord>();
-  for (const item of results) {
-    const existing = grouped.get(item.normalized_word);
-    if (!existing) {
-      grouped.set(item.normalized_word, {
-        normalized_word: item.normalized_word,
-        word: item.word,
-        meaning: item.meaning,
-        part_of_speech: item.part_of_speech,
-        status: item.status,
-        matched_word_id: item.matched_word_id,
-        candidate_ids: String(item.id),
-        occurrence_count: 1,
-      });
-      continue;
-    }
-    existing.occurrence_count += 1;
-    existing.candidate_ids += `,${item.id}`;
-    if (existing.status !== 'pending' && item.status === 'pending') {
-      existing.status = 'pending';
-    }
-  }
-
-  return [...grouped.values()];
+  return groupDayWords(results);
 }
 
 export async function updateTranslationVocabulary(
   db: D1Database,
   id: number,
-  input: Partial<Pick<TranslationVocabulary, 'word' | 'meaning' | 'part_of_speech' | 'context'>>
+  input: Partial<Pick<TranslationVocabulary, 'word' | 'meaning' | 'phonetic' | 'part_of_speech' | 'context'>>
 ): Promise<boolean> {
   const fields: string[] = [];
   const values: string[] = [];
@@ -325,6 +348,7 @@ export async function updateTranslationVocabulary(
     values.push(input.word, normalizeWord(input.word));
   }
   if (input.meaning !== undefined) { fields.push('meaning = ?'); values.push(input.meaning); }
+  if (input.phonetic !== undefined) { fields.push('phonetic = ?'); values.push(input.phonetic); }
   if (input.part_of_speech !== undefined) { fields.push('part_of_speech = ?'); values.push(input.part_of_speech); }
   if (input.context !== undefined) { fields.push('context = ?'); values.push(input.context); }
   if (!fields.length) return false;
@@ -357,19 +381,20 @@ export async function acceptTranslationVocabulary(
     await db.prepare(`UPDATE words SET
         word = ?,
         meaning = ?,
+        phonetic = ?,
         part_of_speech = ?,
         familiarity = ?,
         occurrence_count = occurrence_count + 1,
         last_seen_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`)
-      .bind(candidate.word, candidate.meaning, candidate.part_of_speech || '', familiarity, word.id)
+      .bind(candidate.word, candidate.meaning, candidate.phonetic || '', candidate.part_of_speech || '', familiarity, word.id)
       .run();
   } else {
     await db.prepare(`INSERT INTO words
-        (word, normalized_word, meaning, part_of_speech, familiarity, occurrence_count)
-        VALUES (?, ?, ?, ?, ?, 1)`)
-      .bind(candidate.word, normalized, candidate.meaning, candidate.part_of_speech || '', familiarity)
+        (word, normalized_word, meaning, phonetic, part_of_speech, familiarity, occurrence_count)
+        VALUES (?, ?, ?, ?, ?, ?, 1)`)
+      .bind(candidate.word, normalized, candidate.meaning, candidate.phonetic || '', candidate.part_of_speech || '', familiarity)
       .run();
     word = await db.prepare('SELECT * FROM words WHERE normalized_word = ?').bind(normalized).first<Word>();
   }
@@ -461,7 +486,7 @@ export async function getWord(db: D1Database, id: number): Promise<WordDetail | 
 export async function updateWord(
   db: D1Database,
   id: number,
-  input: Partial<Pick<Word, 'word' | 'meaning' | 'part_of_speech' | 'familiarity'>>
+  input: Partial<Pick<Word, 'word' | 'meaning' | 'phonetic' | 'part_of_speech' | 'familiarity'>>
 ): Promise<boolean> {
   const fields: string[] = [];
   const values: string[] = [];
@@ -471,6 +496,7 @@ export async function updateWord(
     values.push(input.word, normalizeWord(input.word));
   }
   if (input.meaning !== undefined) { fields.push('meaning = ?'); values.push(input.meaning); }
+  if (input.phonetic !== undefined) { fields.push('phonetic = ?'); values.push(input.phonetic); }
   if (input.part_of_speech !== undefined) { fields.push('part_of_speech = ?'); values.push(input.part_of_speech); }
   if (input.familiarity !== undefined) { fields.push('familiarity = ?'); values.push(input.familiarity); }
   if (!fields.length) return false;
@@ -481,6 +507,35 @@ export async function updateWord(
     .bind(...values, id)
     .run();
   return success;
+}
+
+export async function deleteWord(db: D1Database, id: number): Promise<boolean> {
+  const existing = await db
+    .prepare('SELECT id FROM words WHERE id = ?')
+    .bind(id)
+    .first<{ id: number }>();
+  if (!existing) return false;
+
+  await db.batch([
+    db.prepare('DELETE FROM word_occurrences WHERE word_id = ?').bind(id),
+    db.prepare(`UPDATE translation_vocabulary
+      SET status = 'rejected', matched_word_id = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE matched_word_id = ?`)
+      .bind(id),
+    db.prepare('DELETE FROM words WHERE id = ?').bind(id),
+  ]);
+  return true;
+}
+
+export async function deleteWords(db: D1Database, ids: number[]): Promise<number> {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) return 0;
+
+  let deleted = 0;
+  for (const id of uniqueIds) {
+    if (await deleteWord(db, id)) deleted += 1;
+  }
+  return deleted;
 }
 
 function countStatuses<T extends string>(rows: { status: T; total: number }[], statuses: T[]): Record<T, number> {

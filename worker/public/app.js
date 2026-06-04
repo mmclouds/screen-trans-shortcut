@@ -5,6 +5,7 @@ const Icons = {
   edit: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
   trash: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
   plus: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  volume: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a9 9 0 010 14"/></svg>',
   x: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
 };
 
@@ -116,6 +117,8 @@ async function renderToday(app, date) {
       api(`/days/${date}/translations`),
       api(`/days/${date}/words`),
     ]);
+    let currentSummary = summary;
+    let currentTranslations = translations;
 
     app.innerHTML = `
       <section class="today-toolbar" aria-label="Daily review controls">
@@ -137,28 +140,93 @@ async function renderToday(app, date) {
         <button class="tab-btn" data-tab="words">By word</button>
       </div>
 
-      <div class="tab-panel active" id="panel-translations">
-        ${translations.length ? translations.map(todayTranslationCard).join('') : empty('No translations for this day')}
-      </div>
+      <div class="tab-panel active" id="panel-translations"></div>
       <div class="tab-panel" id="panel-words">
         ${dayWords.length ? `<div class="day-word-list">${dayWords.map(dayWordCard).join('')}</div>` : empty('No word candidates for this day')}
       </div>
     `;
 
+    const refreshReviewPanels = () => {
+      renderCompactSummary(app, currentSummary);
+      renderTodayTranslationPanel(app, currentTranslations);
+      bindReviewActions(app.querySelector('#panel-translations'), {
+        onCandidateStatus: (id, status) => {
+          const previousStatus = findReviewItemStatus(currentTranslations, 'candidate', id);
+          currentTranslations = ReviewState.applyReviewStatus(currentTranslations, 'candidate', id, status);
+          updateSummaryCount(currentSummary.vocabulary, previousStatus, status);
+          refreshReviewPanels();
+        },
+        onGrammarStatus: (id, status) => {
+          const previousStatus = findReviewItemStatus(currentTranslations, 'grammar', id);
+          currentTranslations = ReviewState.applyReviewStatus(currentTranslations, 'grammar', id, status);
+          updateSummaryCount(currentSummary.grammar, previousStatus, status);
+          refreshReviewPanels();
+        },
+        onCandidateUpdate: (id, patch) => {
+          currentTranslations = updateLocalCandidate(currentTranslations, id, patch);
+          refreshReviewPanels();
+        },
+      });
+      bindSpeakButtons(app);
+      hydrateMissingPhonetics(app);
+    };
+
     app.querySelector('.date-input').addEventListener('change', function () {
       location.hash = `#/today?date=${this.value}`;
     });
     bindTabs(app);
-    bindReviewActions(app, () => renderToday(app, date));
+    bindSourceImages(app);
+    refreshReviewPanels();
   } catch (err) {
     app.innerHTML = errorState(err);
   }
 }
 
+function findReviewItemStatus(translations, kind, id) {
+  const key = kind === 'grammar' ? 'grammar' : 'candidates';
+  for (const translation of translations || []) {
+    const item = (translation[key] || []).find((entry) => Number(entry.id) === Number(id));
+    if (item) return item.status;
+  }
+  return null;
+}
+
+function updateSummaryCount(bucket, previousStatus, nextStatus) {
+  if (!bucket || previousStatus === nextStatus) return;
+  if (previousStatus && bucket[previousStatus] > 0) bucket[previousStatus] -= 1;
+  if (nextStatus && bucket[nextStatus] !== undefined) bucket[nextStatus] += 1;
+}
+
+function updateLocalCandidate(translations, id, patch) {
+  return (translations || []).map((translation) => ({
+    ...translation,
+    candidates: (translation.candidates || []).map((candidate) => (
+      Number(candidate.id) === Number(id) ? { ...candidate, ...patch } : candidate
+    )),
+  }));
+}
+
+function renderCompactSummary(root, summary) {
+  const el = root.querySelector('.compact-summary');
+  if (!el) return;
+  el.innerHTML = `
+    <span><strong>${summary.translations}</strong> 翻译</span>
+    <span><strong>${summary.vocabulary.pending}</strong> 待处理</span>
+    <span><strong>${summary.vocabulary.accepted}</strong> 已收录</span>
+    <span><strong>${summary.vocabulary.filtered}</strong> 已过滤</span>
+  `;
+}
+
+function renderTodayTranslationPanel(root, translations) {
+  const panel = root.querySelector('#panel-translations');
+  if (!panel) return;
+  panel.innerHTML = translations.length ? translations.map(todayTranslationCard).join('') : empty('No translations for this day');
+}
+
 function todayTranslationCard(t) {
-  const pending = [...t.candidates, ...t.grammar].filter(x => x.status === 'pending').length;
-  const filtered = t.candidates.filter(x => x.status === 'filtered');
-  const visibleCandidates = t.candidates.filter(x => x.status !== 'filtered');
+  const pending = ReviewState.countPending(t);
+  const vocabulary = ReviewState.partitionCandidates(t.candidates);
+  const grammar = ReviewState.partitionCandidates(t.grammar);
   return `
     <article class="review-card">
       <div class="review-main">
@@ -174,13 +242,15 @@ function todayTranslationCard(t) {
 
       <div class="review-section">
         <h3>Vocabulary</h3>
-        ${visibleCandidates.length ? visibleCandidates.map(candidateCard).join('') : '<p class="muted">No visible word candidates.</p>'}
-        ${filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${filtered.length})</summary>${filtered.map(candidateCard).join('')}</details>` : ''}
+        ${vocabulary.active.length ? vocabulary.active.map(candidateCard).join('') : '<p class="muted">No visible word candidates.</p>'}
+        ${vocabulary.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${vocabulary.rejected.length})</summary>${vocabulary.rejected.map(candidateCard).join('')}</details>` : ''}
+        ${vocabulary.filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${vocabulary.filtered.length})</summary>${vocabulary.filtered.map(candidateCard).join('')}</details>` : ''}
       </div>
 
       <div class="review-section">
         <h3>Grammar</h3>
-        ${t.grammar.length ? t.grammar.map(grammarReviewCard).join('') : '<p class="muted">No grammar candidates.</p>'}
+        ${grammar.active.length ? grammar.active.map(grammarReviewCard).join('') : '<p class="muted">No grammar candidates.</p>'}
+        ${grammar.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${grammar.rejected.length})</summary>${grammar.rejected.map(grammarReviewCard).join('')}</details>` : ''}
       </div>
     </article>
   `;
@@ -191,18 +261,18 @@ function candidateCard(v) {
     <div class="candidate-card status-${escAttr(v.status)}">
       <div>
         <strong>${escHtml(v.word)}</strong>
+        <button class="btn btn-ghost btn-sm speak-word" type="button" data-speak="${escAttr(v.word)}" aria-label="Play pronunciation">${Icons.volume}</button>
         <span class="pill">${escHtml(v.status)}</span>
+        ${phoneticSpan(v.word, v.phonetic)}
         ${v.part_of_speech ? `<span class="muted">${escHtml(v.part_of_speech)}</span>` : ''}
         <p>${escHtml(v.meaning)}</p>
         ${v.context ? `<small>${escHtml(v.context)}</small>` : ''}
       </div>
       <div class="candidate-actions">
-        ${v.status === 'pending' || v.status === 'filtered' ? `
-          <button class="btn btn-primary btn-sm accept-candidate" data-id="${v.id}" data-familiarity="unknown">Unknown</button>
-          <button class="btn btn-ghost btn-sm accept-candidate" data-id="${v.id}" data-familiarity="learning">Learning</button>
-          <button class="btn btn-ghost btn-sm accept-candidate" data-id="${v.id}" data-familiarity="mastered">Mastered</button>
-          <button class="btn btn-ghost btn-sm edit-candidate" data-id="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
-          <button class="btn btn-danger btn-sm reject-candidate" data-id="${v.id}">Reject</button>
+        ${v.status === 'pending' || v.status === 'rejected' || v.status === 'filtered' ? `
+          <button class="btn btn-primary btn-sm accept-candidate" data-id="${v.id}">接受</button>
+          <button class="btn btn-ghost btn-sm edit-candidate" data-id="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-phonetic="${escAttr(v.phonetic || '')}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
+          ${v.status === 'pending' || v.status === 'filtered' ? `<button class="btn btn-danger btn-sm reject-candidate" data-id="${v.id}">拒绝</button>` : ''}
         ` : ''}
       </div>
     </div>
@@ -218,10 +288,10 @@ function grammarReviewCard(g) {
         <p>${escHtml(g.explanation)}</p>
         ${g.example ? `<small>${escHtml(g.example)}</small>` : ''}
       </div>
-      ${g.status === 'pending' ? `
+      ${g.status === 'pending' || g.status === 'rejected' ? `
         <div class="candidate-actions">
-          <button class="btn btn-primary btn-sm accept-grammar" data-id="${g.id}">Accept</button>
-          <button class="btn btn-danger btn-sm reject-grammar" data-id="${g.id}">Reject</button>
+          <button class="btn btn-primary btn-sm accept-grammar" data-id="${g.id}">接受</button>
+          ${g.status === 'pending' ? `<button class="btn btn-danger btn-sm reject-grammar" data-id="${g.id}">拒绝</button>` : ''}
         </div>
       ` : ''}
     </div>
@@ -233,54 +303,75 @@ function dayWordCard(w) {
     <div class="item-card">
       <div class="item-title">${escHtml(w.word)} <span class="pill">${escHtml(w.status)}</span></div>
       <div class="item-subtitle">${escHtml(w.meaning)}</div>
-      <div class="item-meta">${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrence${w.occurrence_count > 1 ? 's' : ''}</div>
+      <div class="item-meta">
+        ${phoneticSpan(w.word, w.phonetic)}
+        ${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrence${w.occurrence_count > 1 ? 's' : ''}
+        <button class="btn btn-ghost btn-sm speak-word" type="button" data-speak="${escAttr(w.word)}" aria-label="Play pronunciation">${Icons.volume}</button>
+      </div>
+      ${w.occurrences?.length ? `
+        <div class="word-occurrences">
+          ${w.occurrences.map(wordOccurrence).join('')}
+        </div>
+      ` : ''}
     </div>
   `;
 }
 
-function bindReviewActions(root, refresh) {
+function wordOccurrence(item) {
+  const sentence = item.context || item.source_text || '';
+  return `
+    <div class="word-occurrence">
+      <p>${escHtml(sentence || '(no source sentence)')}</p>
+      ${item.translated_text ? `<small>${escHtml(item.translated_text)}</small>` : ''}
+      <button class="btn btn-ghost btn-sm source-image" type="button" data-src="${escAttr(item.original_image_url)}">来源</button>
+    </div>
+  `;
+}
+
+function bindReviewActions(root, handlers) {
   root.querySelectorAll('.accept-candidate').forEach(btn => {
     btn.addEventListener('click', async function () {
       await api(`/translation-vocabulary/${this.dataset.id}/accept`, {
         method: 'POST',
-        body: JSON.stringify({ familiarity: this.dataset.familiarity }),
+        body: JSON.stringify({ familiarity: 'unknown' }),
       });
       showToast('Word accepted');
-      refresh();
+      handlers.onCandidateStatus(Number(this.dataset.id), 'accepted');
     });
   });
   root.querySelectorAll('.reject-candidate').forEach(btn => {
     btn.addEventListener('click', async function () {
       await api(`/translation-vocabulary/${this.dataset.id}/reject`, { method: 'POST' });
       showToast('Word rejected');
-      refresh();
+      handlers.onCandidateStatus(Number(this.dataset.id), 'rejected');
     });
   });
   root.querySelectorAll('.edit-candidate').forEach(btn => {
     btn.addEventListener('click', function () {
-      editCandidate(this.dataset, refresh);
+      editCandidate(this.dataset, handlers.onCandidateUpdate);
     });
   });
   root.querySelectorAll('.accept-grammar').forEach(btn => {
     btn.addEventListener('click', async function () {
       await api(`/grammar-notes/${this.dataset.id}/accept`, { method: 'POST' });
       showToast('Grammar accepted');
-      refresh();
+      handlers.onGrammarStatus(Number(this.dataset.id), 'accepted');
     });
   });
   root.querySelectorAll('.reject-grammar').forEach(btn => {
     btn.addEventListener('click', async function () {
       await api(`/grammar-notes/${this.dataset.id}/reject`, { method: 'POST' });
       showToast('Grammar rejected');
-      refresh();
+      handlers.onGrammarStatus(Number(this.dataset.id), 'rejected');
     });
   });
 }
 
-function editCandidate(data, refresh) {
+function editCandidate(data, onUpdate) {
   openModal('Edit Word Candidate', [
     { name: 'word', label: 'Word', value: data.word },
     { name: 'meaning', label: 'Meaning', value: data.meaning },
+    { name: 'phonetic', label: 'Phonetic', value: data.phonetic, required: false },
     { name: 'part_of_speech', label: 'Part of speech', value: data.pos, required: false },
     { name: 'context', label: 'Context', value: data.context, required: false },
   ], async (formData) => {
@@ -289,7 +380,7 @@ function editCandidate(data, refresh) {
       body: JSON.stringify(formData),
     });
     showToast('Candidate updated');
-    refresh();
+    onUpdate(Number(data.id), formData);
   });
 }
 
@@ -304,7 +395,8 @@ async function renderWords(app) {
     if (q) query.set('q', q);
     if (familiarity) query.set('familiarity', familiarity);
     if (sort) query.set('sort', sort);
-    const words = await api(`/words?${query.toString()}`);
+    let words = await api(`/words?${query.toString()}`);
+    const selectedWordIds = new Set();
 
     app.innerHTML = `
       <h1 class="page-title">Words</h1>
@@ -323,10 +415,34 @@ async function renderWords(app) {
         </select>
         <button class="btn btn-primary" type="submit">Apply</button>
       </form>
-      <div class="word-list">
-        ${words.length ? words.map(wordCard).join('') : empty('No words yet')}
+      <div class="bulk-toolbar hidden">
+        <span class="bulk-count">0 selected</span>
+        <button class="btn btn-danger btn-sm bulk-delete-words" type="button">${Icons.trash} Delete selected</button>
       </div>
+      <div class="word-list"></div>
     `;
+
+    const refreshWordList = () => {
+      renderWordList(app, words);
+      bindWordActions(app, {
+        selectedWordIds,
+        onSelectionChange: () => renderBulkToolbar(app, selectedWordIds),
+        onDelete: (id) => {
+          words = ReviewState.removeById(words, id);
+          selectedWordIds.delete(Number(id));
+          renderBulkToolbar(app, selectedWordIds);
+          refreshWordList();
+        },
+        onBulkDelete: (ids) => {
+          words = ReviewState.removeByIds(words, ids);
+          selectedWordIds.clear();
+          renderBulkToolbar(app, selectedWordIds);
+          refreshWordList();
+        },
+      });
+      bindSpeakButtons(app);
+      hydrateMissingPhonetics(app);
+    };
 
     app.querySelector('.words-filters').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -338,33 +454,97 @@ async function renderWords(app) {
       location.hash = `#/words?${next.toString()}`;
     });
 
-    app.querySelectorAll('.word-familiarity').forEach(select => {
-      select.addEventListener('change', async function () {
-        await api(`/words/${this.dataset.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ familiarity: this.value }),
-        });
-        showToast('Word updated');
-      });
-    });
+    refreshWordList();
   } catch (err) {
     app.innerHTML = errorState(err);
   }
 }
 
+function renderBulkToolbar(root, selectedWordIds) {
+  const toolbar = root.querySelector('.bulk-toolbar');
+  const count = root.querySelector('.bulk-count');
+  if (!toolbar || !count) return;
+  const total = selectedWordIds.size;
+  toolbar.classList.toggle('hidden', total === 0);
+  count.textContent = `${total} selected`;
+}
+
+function renderWordList(root, words) {
+  const list = root.querySelector('.word-list');
+  if (!list) return;
+  list.innerHTML = words.length ? words.map(wordCard).join('') : empty('No words yet');
+}
+
+function bindWordActions(root, handlers) {
+  root.querySelectorAll('.word-familiarity').forEach(select => {
+    select.addEventListener('change', async function () {
+      await api(`/words/${this.dataset.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ familiarity: this.value }),
+      });
+      showToast('Word updated');
+    });
+  });
+
+  root.querySelectorAll('.word-select').forEach(input => {
+    input.checked = handlers.selectedWordIds.has(Number(input.value));
+    input.addEventListener('change', function () {
+      const id = Number(this.value);
+      if (this.checked) {
+        handlers.selectedWordIds.add(id);
+      } else {
+        handlers.selectedWordIds.delete(id);
+      }
+      handlers.onSelectionChange();
+    });
+  });
+
+  root.querySelectorAll('.delete-word').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      if (!confirm('Delete this word from the notebook?')) return;
+      await api(`/words/${this.dataset.id}`, { method: 'DELETE' });
+      showToast('Word deleted');
+      handlers.onDelete(Number(this.dataset.id));
+    });
+  });
+
+  const bulkDelete = root.querySelector('.bulk-delete-words');
+  if (bulkDelete) bulkDelete.onclick = async () => {
+    const ids = [...handlers.selectedWordIds];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected words from the notebook?`)) return;
+    await api('/words/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+    showToast('Words deleted');
+    handlers.onBulkDelete(ids);
+  };
+}
+
 function wordCard(w) {
   return `
     <article class="item-card word-card">
+      <label class="word-select-wrap" aria-label="Select word">
+        <input class="word-select" type="checkbox" value="${w.id}">
+      </label>
       <div>
         <div class="item-title">${escHtml(w.word)}</div>
         <div class="item-subtitle">${escHtml(w.meaning)}</div>
-        <div class="item-meta">${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrences · last seen ${formatDate(w.last_seen_at)}</div>
+        <div class="item-meta">
+          ${phoneticSpan(w.word, w.phonetic)}
+          ${escHtml(w.part_of_speech || '-')} · ${w.occurrence_count} occurrences · last seen ${formatDate(w.last_seen_at)}
+          <button class="btn btn-ghost btn-sm speak-word" type="button" data-speak="${escAttr(w.word)}" aria-label="Play pronunciation">${Icons.volume}</button>
+        </div>
       </div>
-      <select class="input word-familiarity" data-id="${w.id}">
-        <option value="unknown" ${w.familiarity === 'unknown' ? 'selected' : ''}>Unknown</option>
-        <option value="learning" ${w.familiarity === 'learning' ? 'selected' : ''}>Learning</option>
-        <option value="mastered" ${w.familiarity === 'mastered' ? 'selected' : ''}>Mastered</option>
-      </select>
+      <div class="word-actions">
+        <select class="input word-familiarity" data-id="${w.id}">
+          <option value="unknown" ${w.familiarity === 'unknown' ? 'selected' : ''}>Unknown</option>
+          <option value="learning" ${w.familiarity === 'learning' ? 'selected' : ''}>Learning</option>
+          <option value="mastered" ${w.familiarity === 'mastered' ? 'selected' : ''}>Mastered</option>
+        </select>
+        <button class="btn btn-danger btn-sm delete-word" type="button" data-id="${w.id}">${Icons.trash}</button>
+      </div>
     </article>
   `;
 }
@@ -421,9 +601,13 @@ async function renderDetail(app, id) {
       status: 'accepted',
       normalized_word: v.word,
     }));
+    let currentTranslation = { ...t, candidates };
 
     app.innerHTML = `
-      <a href="#/history" class="back-link">${Icons.arrowLeft} Back</a>
+      <div class="detail-toolbar">
+        <a href="#/history" class="back-link">${Icons.arrowLeft} Back</a>
+        <button class="btn btn-danger btn-sm delete-translation" type="button">${Icons.trash} Delete</button>
+      </div>
 
       <div class="compare-grid">
         <figure>
@@ -456,18 +640,67 @@ async function renderDetail(app, id) {
         <button class="tab-btn" data-tab="grammar">Grammar (${t.grammar.length})</button>
       </div>
 
-      <div class="tab-panel active" id="panel-vocab">
-        ${candidates.length ? candidates.map(candidateCard).join('') : empty('No vocabulary')}
-      </div>
-      <div class="tab-panel" id="panel-grammar">
-        ${t.grammar.length ? t.grammar.map(grammarReviewCard).join('') : empty('No grammar')}
-      </div>
+      <div class="tab-panel active" id="panel-vocab"></div>
+      <div class="tab-panel" id="panel-grammar"></div>
     `;
 
+    const refreshDetailPanels = () => {
+      renderDetailReviewPanels(app, currentTranslation);
+      bindReviewActions(app.querySelector('#panel-vocab'), {
+        onCandidateStatus: (candidateId, status) => {
+          currentTranslation = ReviewState.applyReviewStatus([currentTranslation], 'candidate', candidateId, status)[0];
+          refreshDetailPanels();
+        },
+        onGrammarStatus: () => {},
+        onCandidateUpdate: (candidateId, patch) => {
+          currentTranslation = updateLocalCandidate([currentTranslation], candidateId, patch)[0];
+          refreshDetailPanels();
+        },
+      });
+      bindReviewActions(app.querySelector('#panel-grammar'), {
+        onCandidateStatus: () => {},
+        onGrammarStatus: (grammarId, status) => {
+          currentTranslation = ReviewState.applyReviewStatus([currentTranslation], 'grammar', grammarId, status)[0];
+          refreshDetailPanels();
+        },
+        onCandidateUpdate: () => {},
+      });
+      bindSpeakButtons(app);
+      hydrateMissingPhonetics(app);
+    };
+
     bindTabs(app);
-    bindReviewActions(app, () => renderDetail(app, id));
+    refreshDetailPanels();
+    app.querySelector('.delete-translation').addEventListener('click', async () => {
+      if (!confirm('Delete this translation and all related vocabulary and grammar?')) return;
+      await api(`/translations/${id}`, { method: 'DELETE' });
+      showToast('Translation deleted');
+      location.hash = '#/history';
+    });
   } catch (err) {
     app.innerHTML = errorState(err);
+  }
+}
+
+function renderDetailReviewPanels(root, translation) {
+  const vocabPanel = root.querySelector('#panel-vocab');
+  const grammarPanel = root.querySelector('#panel-grammar');
+  const vocabulary = ReviewState.partitionCandidates(translation.candidates || []);
+  const grammar = ReviewState.partitionCandidates(translation.grammar || []);
+
+  if (vocabPanel) {
+    vocabPanel.innerHTML = `
+      ${vocabulary.active.length ? vocabulary.active.map(candidateCard).join('') : empty('No vocabulary')}
+      ${vocabulary.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${vocabulary.rejected.length})</summary>${vocabulary.rejected.map(candidateCard).join('')}</details>` : ''}
+      ${vocabulary.filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${vocabulary.filtered.length})</summary>${vocabulary.filtered.map(candidateCard).join('')}</details>` : ''}
+    `;
+  }
+
+  if (grammarPanel) {
+    grammarPanel.innerHTML = `
+      ${grammar.active.length ? grammar.active.map(grammarReviewCard).join('') : empty('No grammar')}
+      ${grammar.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${grammar.rejected.length})</summary>${grammar.rejected.map(grammarReviewCard).join('')}</details>` : ''}
+    `;
   }
 }
 
@@ -478,6 +711,72 @@ function bindTabs(root) {
       root.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       this.classList.add('active');
       document.getElementById(`panel-${this.dataset.tab}`).classList.add('active');
+    });
+  });
+}
+
+function bindSourceImages(root) {
+  root.querySelectorAll('.source-image').forEach(btn => {
+    btn.addEventListener('click', function () {
+      if (this.dataset.src) openLightbox(this.dataset.src);
+    });
+  });
+}
+
+function phoneticSpan(word, phonetic) {
+  const value = phonetic || '';
+  return `<span class="phonetic ${value ? '' : 'phonetic-empty'}" data-phonetic-word="${escAttr(word)}">${escHtml(value)}</span>`;
+}
+
+function hydrateMissingPhonetics(root) {
+  const nodes = [...root.querySelectorAll('[data-phonetic-word]')];
+  const words = [...new Set(nodes.map((node) => node.dataset.phoneticWord).filter(Boolean))];
+  words.forEach(async (word) => {
+    try {
+      const result = await api(`/phonetic?word=${encodeURIComponent(word)}`);
+      if (result.phonetic) {
+        root.querySelectorAll(`.phonetic-empty[data-phonetic-word="${cssAttr(word)}"]`).forEach((node) => {
+          node.textContent = result.phonetic;
+          node.classList.remove('phonetic-empty');
+        });
+      }
+      if (result.audio) {
+        root.querySelectorAll(`.speak-word[data-speak="${cssAttr(word)}"]`).forEach((node) => {
+          node.dataset.audio = result.audio;
+        });
+      }
+    } catch (error) {
+      console.warn('Unable to load pronunciation', word, error);
+    }
+  });
+}
+
+async function loadPronunciation(word) {
+  const result = await api(`/phonetic?word=${encodeURIComponent(word)}`);
+  return result.audio || '';
+}
+
+async function playPronunciation(word, audioUrl) {
+  const audio = audioUrl || await loadPronunciation(word);
+  if (!audio) {
+    throw new Error('No dictionary audio found');
+  }
+  await new Audio(audio).play();
+}
+
+async function speakText(text, audioUrl = '') {
+  if (!text) return;
+  try {
+    await playPronunciation(text, audioUrl);
+  } catch {
+    showToast('No dictionary pronunciation found');
+  }
+}
+
+function bindSpeakButtons(root) {
+  root.querySelectorAll('.speak-word').forEach(btn => {
+    btn.addEventListener('click', function () {
+      speakText(this.dataset.speak || '', this.dataset.audio || '');
     });
   });
 }
@@ -540,6 +839,10 @@ function escHtmlAttr(s) {
 
 function escAttr(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function cssAttr(s) {
+  return String(s ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function formatDate(s) {

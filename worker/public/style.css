@@ -293,6 +293,7 @@ a:hover {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  white-space: pre-line;
 }
 
 .review-copy small {
@@ -301,6 +302,7 @@ a:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--ink-muted);
+  white-space: pre-line;
 }
 
 .review-meta {
@@ -341,6 +343,23 @@ a:hover {
 .muted {
   color: var(--ink-muted);
   font-size: 13px;
+}
+
+.phonetic {
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-weight: 500;
+  margin-right: var(--space-xs);
+}
+
+.phonetic-empty {
+  display: none;
+}
+
+.speak-word {
+  min-height: 30px;
+  padding: 4px 8px;
+  vertical-align: middle;
 }
 
 .candidate-actions {
@@ -390,9 +409,47 @@ a:hover {
 
 .word-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: auto minmax(0, 1fr) 180px;
   gap: var(--space-md);
   align-items: center;
+}
+
+.word-select-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.word-select {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ink-primary);
+}
+
+.word-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.bulk-count {
+  color: var(--ink-muted);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 @media (max-width: 767px) {
@@ -401,6 +458,14 @@ a:hover {
   .word-card,
   .filters {
     grid-template-columns: 1fr;
+  }
+
+  .word-select-wrap {
+    justify-content: flex-start;
+  }
+
+  .word-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .review-main {
@@ -553,13 +618,17 @@ label {
 /* ===== 图片对比区 ===== */
 .compare-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 220px));
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
+  align-items: start;
 }
 
 .compare-grid img {
   width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: var(--surface);
   border-radius: var(--radius-sm);
   cursor: pointer;
   border: 1px solid var(--border);
@@ -584,7 +653,7 @@ label {
 
 @media (max-width: 767px) {
   .compare-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -617,6 +686,7 @@ label {
   font-size: 15px;
   line-height: 1.6;
   max-width: 65ch;
+  white-space: pre-line;
 }
 
 @media (max-width: 767px) {
@@ -690,6 +760,7 @@ label {
   font-size: 14px;
   line-height: 1.5;
   margin-bottom: var(--space-xs);
+  white-space: pre-line;
 }
 
 .card-body .meta {
@@ -867,6 +938,52 @@ label {
   font-size: 13px;
   color: var(--ink-muted);
   line-height: 1.5;
+}
+
+.word-occurrences {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+}
+
+.word-occurrence {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: start;
+}
+
+.word-occurrence p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.word-occurrence small {
+  grid-column: 1;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.word-occurrence .source-image {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+@media (max-width: 520px) {
+  .word-occurrence {
+    grid-template-columns: 1fr;
+  }
+
+  .word-occurrence .source-image {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: flex-start;
+  }
 }
 
 .item-card .item-actions {
@@ -1082,6 +1199,18 @@ label {
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-md);
+}
+
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.detail-toolbar .back-link {
+  margin-bottom: 0;
 }
 
 /* ===== 辅助 ===== */
