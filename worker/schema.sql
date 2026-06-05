@@ -4,6 +4,7 @@ CREATE TABLE translations (
   original_image_url TEXT NOT NULL,
   translated_image_url TEXT NOT NULL,
   source_text TEXT NOT NULL DEFAULT '',
+  formatted_source_text TEXT NOT NULL DEFAULT '',
   translated_text TEXT NOT NULL DEFAULT '',
   source_language TEXT DEFAULT 'auto',
   target_language TEXT NOT NULL DEFAULT 'zh',

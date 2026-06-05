@@ -28,6 +28,10 @@ export interface AiExtractionMessage {
   target_language: string;
 }
 
+export interface SelectedVocabularyRequest {
+  words: string[];
+}
+
 export interface VocabInput {
   translation_id: string;
   word: string;
@@ -52,6 +56,7 @@ export interface Translation {
   original_image_url: string;
   translated_image_url: string;
   source_text: string;
+  formatted_source_text: string;
   translated_text: string;
   source_language: string;
   target_language: string;

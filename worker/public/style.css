@@ -393,6 +393,92 @@ a:hover {
   font-weight: 500;
 }
 
+.word-picker {
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.word-picker-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 32px;
+  color: var(--ink-primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.word-picker-summary small {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.word-picker-source {
+  margin-top: var(--space-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 2.1;
+}
+
+.source-token-text {
+  white-space: pre-wrap;
+}
+
+.source-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  margin: 1px 2px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.source-token:hover {
+  border-color: var(--border-hover);
+}
+
+.source-token.selected {
+  background: var(--ink-primary);
+  border-color: var(--ink-primary);
+  color: #fff;
+}
+
+.source-token.existing {
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: default;
+  opacity: 0.7;
+}
+
+.word-picker-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.word-picker-count {
+  color: var(--ink-muted);
+  font-size: 13px;
+  margin-right: auto;
+}
+
 .day-word-list,
 .word-list {
   display: grid;
@@ -474,6 +560,16 @@ a:hover {
 
   .candidate-actions {
     justify-content: flex-start;
+  }
+
+  .word-picker-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .word-picker-count {
+    width: 100%;
   }
 }
 

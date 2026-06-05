@@ -136,7 +136,7 @@ export async function deleteTranslation(
 export async function updateTranslationFormattedText(
   db: D1Database,
   id: string,
-  input: { source_text?: string; translated_text?: string }
+  input: { formatted_source_text?: string; source_text?: string; translated_text?: string }
 ): Promise<boolean> {
   const fields: string[] = [];
   const values: string[] = [];
@@ -144,6 +144,10 @@ export async function updateTranslationFormattedText(
   if (input.source_text !== undefined) {
     fields.push('source_text = ?');
     values.push(input.source_text);
+  }
+  if (input.formatted_source_text !== undefined) {
+    fields.push('formatted_source_text = ?');
+    values.push(input.formatted_source_text);
   }
   if (input.translated_text !== undefined) {
     fields.push('translated_text = ?');
@@ -244,6 +248,25 @@ export async function saveAiExtractionCandidates(
   }
 
   if (stmts.length) await db.batch(stmts);
+}
+
+export async function listTranslationVocabularyByWords(
+  db: D1Database,
+  translationId: string,
+  words: string[]
+): Promise<TranslationVocabulary[]> {
+  const normalizedWords = [...new Set(words.map(normalizeWord).filter(Boolean))];
+  if (!normalizedWords.length) return [];
+
+  const placeholders = normalizedWords.map(() => '?').join(', ');
+  const { results } = await db
+    .prepare(`SELECT * FROM translation_vocabulary
+      WHERE translation_id = ? AND normalized_word IN (${placeholders})
+      ORDER BY id ASC`)
+    .bind(translationId, ...normalizedWords)
+    .all<TranslationVocabulary>();
+
+  return results;
 }
 
 export async function listDayTranslations(

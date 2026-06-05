@@ -119,6 +119,7 @@ async function renderToday(app, date) {
     ]);
     let currentSummary = summary;
     let currentTranslations = translations;
+    const selectedWordsByTranslation = new Map();
 
     app.innerHTML = `
       <section class="today-toolbar" aria-label="Daily review controls">
@@ -148,7 +149,7 @@ async function renderToday(app, date) {
 
     const refreshReviewPanels = () => {
       renderCompactSummary(app, currentSummary);
-      renderTodayTranslationPanel(app, currentTranslations);
+      renderTodayTranslationPanel(app, currentTranslations, selectedWordsByTranslation);
       bindReviewActions(app.querySelector('#panel-translations'), {
         onCandidateStatus: (id, status) => {
           const previousStatus = findReviewItemStatus(currentTranslations, 'candidate', id);
@@ -164,6 +165,23 @@ async function renderToday(app, date) {
         },
         onCandidateUpdate: (id, patch) => {
           currentTranslations = updateLocalCandidate(currentTranslations, id, patch);
+          refreshReviewPanels();
+        },
+      });
+      bindWordPickerActions(app.querySelector('#panel-translations'), {
+        selectionsByTranslation: selectedWordsByTranslation,
+        onExtract: async (translationId, words) => {
+          const candidates = await api(`/translations/${translationId}/vocabulary/extract-selected`, {
+            method: 'POST',
+            body: JSON.stringify({ words }),
+          });
+          selectedWordsByTranslation.set(String(translationId), new Set());
+          currentTranslations = currentTranslations.map((translation) => (
+            String(translation.id) === String(translationId)
+              ? { ...translation, candidates: mergeCandidates(translation.candidates || [], candidates) }
+              : translation
+          ));
+          showToast(candidates.length ? 'Word candidates extracted' : 'No new candidates found');
           refreshReviewPanels();
         },
       });
@@ -217,13 +235,18 @@ function renderCompactSummary(root, summary) {
   `;
 }
 
-function renderTodayTranslationPanel(root, translations) {
+function renderTodayTranslationPanel(root, translations, selectionsByTranslation = new Map()) {
   const panel = root.querySelector('#panel-translations');
   if (!panel) return;
-  panel.innerHTML = translations.length ? translations.map(todayTranslationCard).join('') : empty('No translations for this day');
+  panel.innerHTML = translations.length
+    ? translations.map((translation) => todayTranslationCard(
+      translation,
+      selectionsByTranslation.get(String(translation.id)) || new Set()
+    )).join('')
+    : empty('No translations for this day');
 }
 
-function todayTranslationCard(t) {
+function todayTranslationCard(t, selectedWords = new Set()) {
   const pending = ReviewState.countPending(t);
   const vocabulary = ReviewState.partitionCandidates(t.candidates);
   const grammar = ReviewState.partitionCandidates(t.grammar);
@@ -235,13 +258,14 @@ function todayTranslationCard(t) {
         </a>
         <div class="review-copy">
           <div class="review-meta">${formatDate(t.created_at)} · ${pending ? `${pending} pending` : 'Processed'}</div>
-          <p>${escHtml(t.source_text || '(no text detected)')}</p>
+          <p>${escHtml(displaySourceText(t) || '(no text detected)')}</p>
           <small>${escHtml(t.translated_text || '')}</small>
         </div>
       </div>
 
       <div class="review-section">
         <h3>Vocabulary</h3>
+        ${renderWordPicker(t, selectedWords)}
         ${vocabulary.active.length ? vocabulary.active.map(candidateCard).join('') : '<p class="muted">No visible word candidates.</p>'}
         ${vocabulary.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${vocabulary.rejected.length})</summary>${vocabulary.rejected.map(candidateCard).join('')}</details>` : ''}
         ${vocabulary.filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${vocabulary.filtered.length})</summary>${vocabulary.filtered.map(candidateCard).join('')}</details>` : ''}
@@ -326,6 +350,111 @@ function wordOccurrence(item) {
       <button class="btn btn-ghost btn-sm source-image" type="button" data-src="${escAttr(item.original_image_url)}">来源</button>
     </div>
   `;
+}
+
+function renderWordPicker(translation, selectedWords = new Set()) {
+  const sourceText = displaySourceText(translation);
+  if (!sourceText) return '';
+
+  const tokens = ReviewState.tokenizeSourceText(sourceText);
+  const existingWords = ReviewState.collectExistingNormalizedWords(translation.candidates || []);
+  const source = tokens.map((token, index) => {
+    if (token.type !== 'word') {
+      return `<span class="source-token-text">${escHtml(token.value)}</span>`;
+    }
+
+    const exists = existingWords.has(token.key);
+    const selected = selectedWords.has(token.key);
+    const classes = ['source-token'];
+    if (exists) classes.push('existing');
+    if (selected) classes.push('selected');
+    return `<button class="${classes.join(' ')}" type="button" data-word="${escAttr(token.value)}" data-key="${escAttr(token.key)}" ${exists ? 'disabled' : ''}>${escHtml(token.value)}</button>`;
+  }).join('');
+
+  return `
+    <details class="word-picker" data-translation-id="${escAttr(translation.id)}">
+      <summary class="word-picker-summary">
+        <span>补提漏词</span>
+        <small>${tokens.filter((token) => token.type === 'word' && !existingWords.has(token.key)).length} selectable</small>
+      </summary>
+      <div class="word-picker-source">${source}</div>
+      <div class="word-picker-actions">
+        <span class="word-picker-count">${selectedWords.size} selected</span>
+        <button class="btn btn-primary btn-sm extract-selected" type="button" ${selectedWords.size ? '' : 'disabled'}>让 AI 识别</button>
+        <button class="btn btn-ghost btn-sm clear-selected" type="button" ${selectedWords.size ? '' : 'disabled'}>清空</button>
+      </div>
+    </details>
+  `;
+}
+
+function bindWordPickerActions(root, handlers) {
+  if (!root) return;
+
+  root.querySelectorAll('.word-picker').forEach((picker) => {
+    const translationId = String(picker.dataset.translationId || '');
+    const selectedWords = handlers.selectionsByTranslation.get(translationId) || new Set();
+    handlers.selectionsByTranslation.set(translationId, selectedWords);
+
+    const sync = () => {
+      picker.querySelectorAll('.source-token').forEach((token) => {
+        token.classList.toggle('selected', selectedWords.has(token.dataset.key));
+      });
+      const count = picker.querySelector('.word-picker-count');
+      if (count) count.textContent = `${selectedWords.size} selected`;
+      picker.querySelectorAll('.extract-selected, .clear-selected').forEach((btn) => {
+        btn.disabled = selectedWords.size === 0;
+      });
+    };
+
+    picker.querySelectorAll('.source-token:not(.existing)').forEach((token) => {
+      token.addEventListener('click', function () {
+        const key = this.dataset.key;
+        if (!key) return;
+        if (selectedWords.has(key)) {
+          selectedWords.delete(key);
+        } else {
+          selectedWords.add(key);
+        }
+        sync();
+      });
+    });
+
+    const clear = picker.querySelector('.clear-selected');
+    if (clear) {
+      clear.addEventListener('click', () => {
+        selectedWords.clear();
+        sync();
+      });
+    }
+
+    const submit = picker.querySelector('.extract-selected');
+    if (submit) {
+      submit.addEventListener('click', async () => {
+        const words = [...selectedWords].map((key) => (
+          picker.querySelector(`.source-token[data-key="${cssAttr(key)}"]`)?.dataset.word || key
+        ));
+        if (!words.length) return;
+
+        submit.disabled = true;
+        submit.textContent = '识别中...';
+        try {
+          await handlers.onExtract(translationId, words);
+        } catch (error) {
+          showToast(error.message || 'AI extraction failed');
+          sync();
+        } finally {
+          submit.textContent = '让 AI 识别';
+        }
+      });
+    }
+  });
+}
+
+function mergeCandidates(existing, incoming) {
+  const byId = new Map();
+  (existing || []).forEach((candidate) => byId.set(Number(candidate.id), candidate));
+  (incoming || []).forEach((candidate) => byId.set(Number(candidate.id), candidate));
+  return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 function bindReviewActions(root, handlers) {
@@ -566,7 +695,7 @@ async function renderHistory(app) {
           <a href="#/translation/${t.id}" class="translation-card">
             <img src="${escAttr(t.translated_image_url)}" alt="Translated screenshot" loading="lazy">
             <div class="card-body">
-              <div class="source-text">${escHtml(t.source_text || '(no text detected)')}</div>
+              <div class="source-text">${escHtml(displaySourceText(t) || '(no text detected)')}</div>
               <div class="meta">
                 <span>${escHtml(t.source_language)} → ${escHtml(t.target_language)}</span>
                 <span>${formatDate(t.created_at)}</span>
@@ -601,6 +730,7 @@ async function renderDetail(app, id) {
       normalized_word: v.word,
     }));
     let currentTranslation = { ...t, candidates };
+    const selectedWordsByTranslation = new Map([[String(t.id), new Set()]]);
 
     app.innerHTML = `
       <div class="detail-toolbar">
@@ -619,11 +749,11 @@ async function renderDetail(app, id) {
         </figure>
       </div>
 
-      ${t.source_text || t.translated_text ? `
+      ${displaySourceText(t) || t.translated_text ? `
         <div class="text-compare">
           <div class="text-block">
             <h4>Source Text (${escHtml(t.source_language)})</h4>
-            <p>${escHtml(t.source_text || '-')}</p>
+            <p>${escHtml(displaySourceText(t) || '-')}</p>
           </div>
           <div class="text-block">
             <h4>Translation (${escHtml(t.target_language)})</h4>
@@ -644,7 +774,7 @@ async function renderDetail(app, id) {
     `;
 
     const refreshDetailPanels = () => {
-      renderDetailReviewPanels(app, currentTranslation);
+      renderDetailReviewPanels(app, currentTranslation, selectedWordsByTranslation);
       bindReviewActions(app.querySelector('#panel-vocab'), {
         onCandidateStatus: (candidateId, status) => {
           currentTranslation = ReviewState.applyReviewStatus([currentTranslation], 'candidate', candidateId, status)[0];
@@ -653,6 +783,22 @@ async function renderDetail(app, id) {
         onGrammarStatus: () => {},
         onCandidateUpdate: (candidateId, patch) => {
           currentTranslation = updateLocalCandidate([currentTranslation], candidateId, patch)[0];
+          refreshDetailPanels();
+        },
+      });
+      bindWordPickerActions(app.querySelector('#panel-vocab'), {
+        selectionsByTranslation: selectedWordsByTranslation,
+        onExtract: async (translationId, words) => {
+          const candidates = await api(`/translations/${translationId}/vocabulary/extract-selected`, {
+            method: 'POST',
+            body: JSON.stringify({ words }),
+          });
+          selectedWordsByTranslation.set(String(translationId), new Set());
+          currentTranslation = {
+            ...currentTranslation,
+            candidates: mergeCandidates(currentTranslation.candidates || [], candidates),
+          };
+          showToast(candidates.length ? 'Word candidates extracted' : 'No new candidates found');
           refreshDetailPanels();
         },
       });
@@ -681,14 +827,16 @@ async function renderDetail(app, id) {
   }
 }
 
-function renderDetailReviewPanels(root, translation) {
+function renderDetailReviewPanels(root, translation, selectionsByTranslation = new Map()) {
   const vocabPanel = root.querySelector('#panel-vocab');
   const grammarPanel = root.querySelector('#panel-grammar');
   const vocabulary = ReviewState.partitionCandidates(translation.candidates || []);
   const grammar = ReviewState.partitionCandidates(translation.grammar || []);
 
   if (vocabPanel) {
+    const selectedWords = selectionsByTranslation.get(String(translation.id)) || new Set();
     vocabPanel.innerHTML = `
+      ${renderWordPicker(translation, selectedWords)}
       ${vocabulary.active.length ? vocabulary.active.map(candidateCard).join('') : empty('No vocabulary')}
       ${vocabulary.rejected.length ? `<details class="filtered-block"><summary>已拒绝 (${vocabulary.rejected.length})</summary>${vocabulary.rejected.map(candidateCard).join('')}</details>` : ''}
       ${vocabulary.filtered.length ? `<details class="filtered-block"><summary>Filtered mastered words (${vocabulary.filtered.length})</summary>${vocabulary.filtered.map(candidateCard).join('')}</details>` : ''}
@@ -795,6 +943,10 @@ function empty(title, subtitle = '') {
 
 function errorState(err) {
   return `<div class="empty-state"><p>Error: ${escHtml(err.message)}</p></div>`;
+}
+
+function displaySourceText(translation) {
+  return translation?.formatted_source_text || translation?.source_text || '';
 }
 
 function getHashParams() {

@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import * as db from './db';
-import { buildAiExtractionPrompt } from './ai-prompt';
+import { buildAiExtractionPrompt, buildSelectedVocabularyPrompt } from './ai-prompt';
 import { fetchPronunciation } from './phonetic';
-import type { AiExtractionMessage, CreateTranslationBody, Familiarity, TextBlock } from './types';
+import type { AiExtractionMessage, CreateTranslationBody, Familiarity, SelectedVocabularyRequest, TextBlock } from './types';
 
 type Env = {
   DB: D1Database;
@@ -195,6 +195,32 @@ app.post('/api/translations/:id/ai/retry', auth, async (c) => {
 
   console.log('AI 队列手动重试已投递:', id);
   return c.json({ success: true, id });
+});
+
+const selectedVocabularySchema = z.object({
+  words: z.array(z.string().trim().min(1)).min(1).max(30),
+});
+
+app.post('/api/translations/:id/vocabulary/extract-selected', auth, zValidator('json', selectedVocabularySchema), async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<SelectedVocabularyRequest>();
+  const translation = await db.getTranslation(c.env.DB, id);
+  if (!translation) return c.json({ error: 'Not found' }, 404);
+  if (!translation.source_text) return c.json({ error: 'No source_text to analyze' }, 400);
+  if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'OPENROUTER_API_KEY is not configured' }, 400);
+
+  const words = [...new Set(body.words.map((word) => word.trim()).filter(Boolean))].slice(0, 30);
+  const sourceText = translation.formatted_source_text || translation.source_text;
+  const vocabulary = await extractSelectedVocabularyAI(c.env, {
+    translation_id: translation.id,
+    source_text: sourceText,
+    translated_text: translation.translated_text,
+    source_language: translation.source_language,
+    target_language: translation.target_language,
+  }, words);
+
+  await db.saveAiExtractionCandidates(c.env.DB, id, vocabulary, []);
+  return c.json(await db.listTranslationVocabularyByWords(c.env.DB, id, words));
 });
 
 // ========== 每日复习 ==========
@@ -476,14 +502,48 @@ async function extractAI(env: Env, message: AiExtractionMessage) {
   const parsed = JSON.parse(content);
   const vocabulary = normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words).slice(0, 10);
   const grammar = normalizeAiArray(parsed.grammar || parsed.grammar_notes || parsed.patterns).slice(0, 5);
+  const formattedSourceText = normalizeAiText(parsed.formatted_source_text);
   const formattedTranslatedText = normalizeAiText(parsed.formatted_translated_text);
   console.log('AI 返回解析完成:', message.translation_id, vocabulary.length, grammar.length);
 
   return {
+    formattedSourceText,
     formattedTranslatedText,
     vocabulary,
     grammar,
   };
+}
+
+async function extractSelectedVocabularyAI(env: Env, message: AiExtractionMessage, selectedWords: string[]) {
+  const prompt = buildSelectedVocabularyPrompt(message, selectedWords);
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      max_tokens: 1200,
+    }),
+  });
+
+  const data = await response.json<any>();
+  if (!response.ok) {
+    throw new Error(`AI 补提失败: ${response.status} ${JSON.stringify(data).slice(0, 300)}`);
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('AI 返回空内容');
+
+  const parsed = JSON.parse(content);
+  const selected = new Set(selectedWords.map((word) => word.trim().toLowerCase()));
+  return normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words)
+    .filter((item) => typeof item.word === 'string' && selected.has(item.word.trim().toLowerCase()))
+    .slice(0, 30);
 }
 
 function normalizeAiArray(value: unknown): any[] {
@@ -630,6 +690,7 @@ export default {
         }
         const result = await extractAI(env, message.body);
         await db.updateTranslationFormattedText(env.DB, message.body.translation_id, {
+          formatted_source_text: result.formattedSourceText,
           translated_text: result.formattedTranslatedText,
         });
         await db.saveAiExtractionCandidates(env.DB, message.body.translation_id, result.vocabulary, result.grammar);

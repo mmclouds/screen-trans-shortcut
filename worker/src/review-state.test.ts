@@ -17,6 +17,8 @@ type ReviewStateApi = {
   countPending: (translation: { candidates: { status?: string }[]; grammar: { status?: string }[] }) => number;
   removeById: <T extends { id: number }>(items: T[], id: number) => T[];
   removeByIds: <T extends { id: number }>(items: T[], ids: number[]) => T[];
+  tokenizeSourceText: (text: string) => { type: 'word' | 'text'; value: string; key: string }[];
+  collectExistingNormalizedWords: (candidates: { normalized_word?: string; word?: string }[]) => Set<string>;
 };
 
 function loadReviewState(): ReviewStateApi {
@@ -83,5 +85,31 @@ describe('ReviewState', () => {
     const words = [{ id: 1, word: 'insight' }, { id: 2, word: 'clarity' }, { id: 3, word: 'burn' }];
 
     expect(state.removeByIds(words, [1, 3])).toEqual([{ id: 2, word: 'clarity' }]);
+  });
+
+  test('tokenizes source text into English word tokens while preserving punctuation', () => {
+    expect(state.tokenizeSourceText("Burn-rate wasn't stable.\nNet burn improved.")).toEqual([
+      { type: 'word', value: 'Burn-rate', key: 'burn-rate' },
+      { type: 'text', value: ' ', key: 'text-1' },
+      { type: 'word', value: "wasn't", key: "wasn't" },
+      { type: 'text', value: ' ', key: 'text-3' },
+      { type: 'word', value: 'stable', key: 'stable' },
+      { type: 'text', value: '.\n', key: 'text-5' },
+      { type: 'word', value: 'Net', key: 'net' },
+      { type: 'text', value: ' ', key: 'text-7' },
+      { type: 'word', value: 'burn', key: 'burn' },
+      { type: 'text', value: ' ', key: 'text-9' },
+      { type: 'word', value: 'improved', key: 'improved' },
+      { type: 'text', value: '.', key: 'text-11' },
+    ]);
+  });
+
+  test('collects existing normalized words from candidates', () => {
+    const existing = state.collectExistingNormalizedWords([
+      { word: 'Burn-rate', normalized_word: 'burn-rate' },
+      { word: 'Net' },
+    ]);
+
+    expect([...existing]).toEqual(['burn-rate', 'net']);
   });
 });
