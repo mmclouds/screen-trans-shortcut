@@ -220,14 +220,13 @@ export async function saveAiExtractionCandidates(
 
     stmts.push(
       db.prepare(`INSERT OR IGNORE INTO translation_vocabulary
-        (translation_id, word, normalized_word, meaning, phonetic, part_of_speech, context, status, matched_word_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (translation_id, word, normalized_word, meaning, part_of_speech, context, status, matched_word_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(
           translationId,
           v.word,
           normalized,
           v.meaning,
-          v.phonetic || '',
           v.part_of_speech || '',
           v.context || '',
           status,
@@ -338,7 +337,7 @@ export async function listDayWords(db: D1Database, date: string): Promise<DayWor
 export async function updateTranslationVocabulary(
   db: D1Database,
   id: number,
-  input: Partial<Pick<TranslationVocabulary, 'word' | 'meaning' | 'phonetic' | 'part_of_speech' | 'context'>>
+  input: Partial<Pick<TranslationVocabulary, 'word' | 'meaning' | 'part_of_speech' | 'context'>>
 ): Promise<boolean> {
   const fields: string[] = [];
   const values: string[] = [];
@@ -348,7 +347,6 @@ export async function updateTranslationVocabulary(
     values.push(input.word, normalizeWord(input.word));
   }
   if (input.meaning !== undefined) { fields.push('meaning = ?'); values.push(input.meaning); }
-  if (input.phonetic !== undefined) { fields.push('phonetic = ?'); values.push(input.phonetic); }
   if (input.part_of_speech !== undefined) { fields.push('part_of_speech = ?'); values.push(input.part_of_speech); }
   if (input.context !== undefined) { fields.push('context = ?'); values.push(input.context); }
   if (!fields.length) return false;
@@ -381,20 +379,19 @@ export async function acceptTranslationVocabulary(
     await db.prepare(`UPDATE words SET
         word = ?,
         meaning = ?,
-        phonetic = ?,
         part_of_speech = ?,
         familiarity = ?,
         occurrence_count = occurrence_count + 1,
         last_seen_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`)
-      .bind(candidate.word, candidate.meaning, candidate.phonetic || '', candidate.part_of_speech || '', familiarity, word.id)
+      .bind(candidate.word, candidate.meaning, candidate.part_of_speech || '', familiarity, word.id)
       .run();
   } else {
     await db.prepare(`INSERT INTO words
-        (word, normalized_word, meaning, phonetic, part_of_speech, familiarity, occurrence_count)
-        VALUES (?, ?, ?, ?, ?, ?, 1)`)
-      .bind(candidate.word, normalized, candidate.meaning, candidate.phonetic || '', candidate.part_of_speech || '', familiarity)
+        (word, normalized_word, meaning, part_of_speech, familiarity, occurrence_count)
+        VALUES (?, ?, ?, ?, ?, 1)`)
+      .bind(candidate.word, normalized, candidate.meaning, candidate.part_of_speech || '', familiarity)
       .run();
     word = await db.prepare('SELECT * FROM words WHERE normalized_word = ?').bind(normalized).first<Word>();
   }
@@ -486,7 +483,7 @@ export async function getWord(db: D1Database, id: number): Promise<WordDetail | 
 export async function updateWord(
   db: D1Database,
   id: number,
-  input: Partial<Pick<Word, 'word' | 'meaning' | 'phonetic' | 'part_of_speech' | 'familiarity'>>
+  input: Partial<Pick<Word, 'word' | 'meaning' | 'part_of_speech' | 'familiarity'>>
 ): Promise<boolean> {
   const fields: string[] = [];
   const values: string[] = [];
@@ -496,7 +493,6 @@ export async function updateWord(
     values.push(input.word, normalizeWord(input.word));
   }
   if (input.meaning !== undefined) { fields.push('meaning = ?'); values.push(input.meaning); }
-  if (input.phonetic !== undefined) { fields.push('phonetic = ?'); values.push(input.phonetic); }
   if (input.part_of_speech !== undefined) { fields.push('part_of_speech = ?'); values.push(input.part_of_speech); }
   if (input.familiarity !== undefined) { fields.push('familiarity = ?'); values.push(input.familiarity); }
   if (!fields.length) return false;

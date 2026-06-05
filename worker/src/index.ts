@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import * as db from './db';
 import { buildAiExtractionPrompt } from './ai-prompt';
-import { fetchPhonetic, fetchPronunciation } from './phonetic';
+import { fetchPronunciation } from './phonetic';
 import type { AiExtractionMessage, CreateTranslationBody, Familiarity, TextBlock } from './types';
 
 type Env = {
@@ -237,7 +237,6 @@ const familiaritySchema = z.enum(['unknown', 'learning', 'mastered']);
 const updateCandidateSchema = z.object({
   word: z.string().min(1).optional(),
   meaning: z.string().min(1).optional(),
-  phonetic: z.string().optional(),
   part_of_speech: z.string().optional(),
   context: z.string().optional(),
 });
@@ -288,7 +287,6 @@ app.post('/api/grammar-notes/:id/reject', auth, async (c) => {
 const updateWordSchema = z.object({
   word: z.string().min(1).optional(),
   meaning: z.string().min(1).optional(),
-  phonetic: z.string().optional(),
   part_of_speech: z.string().optional(),
   familiarity: familiaritySchema.optional(),
 });
@@ -476,7 +474,7 @@ async function extractAI(env: Env, message: AiExtractionMessage) {
   if (!content) throw new Error('AI 返回空内容');
 
   const parsed = JSON.parse(content);
-  const vocabulary = await withPhonetics(normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words).slice(0, 10));
+  const vocabulary = normalizeAiArray(parsed.vocabulary || parsed.vocab || parsed.words).slice(0, 10);
   const grammar = normalizeAiArray(parsed.grammar || parsed.grammar_notes || parsed.patterns).slice(0, 5);
   const formattedTranslatedText = normalizeAiText(parsed.formatted_translated_text);
   console.log('AI 返回解析完成:', message.translation_id, vocabulary.length, grammar.length);
@@ -490,18 +488,6 @@ async function extractAI(env: Env, message: AiExtractionMessage) {
 
 function normalizeAiArray(value: unknown): any[] {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
-}
-
-async function withPhonetics(items: any[]): Promise<any[]> {
-  const cache = new Map<string, string>();
-  return Promise.all(items.map(async (item) => {
-    const word = typeof item.word === 'string' ? item.word : '';
-    if (!word) return item;
-    if (!cache.has(word)) {
-      cache.set(word, await fetchPhonetic(word));
-    }
-    return { ...item, phonetic: cache.get(word) || '' };
-  }));
 }
 
 function normalizeAiText(value: unknown): string | undefined {

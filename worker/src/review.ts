@@ -37,7 +37,6 @@ type DayWordRow = {
   normalized_word: string;
   word: string;
   meaning: string;
-  phonetic: string;
   part_of_speech: string;
   status: VocabularyStatus;
   matched_word_id: number | null;
@@ -69,7 +68,6 @@ export function groupDayWords(rows: DayWordRow[]): DayWord[] {
         normalized_word: item.normalized_word,
         word: item.word,
         meaning: item.meaning,
-        phonetic: item.phonetic || '',
         part_of_speech: item.part_of_speech,
         status: item.status,
         matched_word_id: item.matched_word_id,

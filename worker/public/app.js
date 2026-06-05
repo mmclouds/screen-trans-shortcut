@@ -271,7 +271,7 @@ function candidateCard(v) {
       <div class="candidate-actions">
         ${v.status === 'pending' || v.status === 'rejected' || v.status === 'filtered' ? `
           <button class="btn btn-primary btn-sm accept-candidate" data-id="${v.id}">接受</button>
-          <button class="btn btn-ghost btn-sm edit-candidate" data-id="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-phonetic="${escAttr(v.phonetic || '')}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
+          <button class="btn btn-ghost btn-sm edit-candidate" data-id="${v.id}" data-word="${escAttr(v.word)}" data-meaning="${escAttr(v.meaning)}" data-pos="${escAttr(v.part_of_speech || '')}" data-context="${escAttr(v.context || '')}">${Icons.edit}</button>
           ${v.status === 'pending' || v.status === 'filtered' ? `<button class="btn btn-danger btn-sm reject-candidate" data-id="${v.id}">拒绝</button>` : ''}
         ` : ''}
       </div>
@@ -371,7 +371,6 @@ function editCandidate(data, onUpdate) {
   openModal('Edit Word Candidate', [
     { name: 'word', label: 'Word', value: data.word },
     { name: 'meaning', label: 'Meaning', value: data.meaning },
-    { name: 'phonetic', label: 'Phonetic', value: data.phonetic, required: false },
     { name: 'part_of_speech', label: 'Part of speech', value: data.pos, required: false },
     { name: 'context', label: 'Context', value: data.context, required: false },
   ], async (formData) => {
